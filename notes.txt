@@ -1,0 +1,482 @@
+YELLOWDUCK FREIGHT SYSTEMS - PROJECT SUMMARY
+
+================================================================================
+OVERVIEW
+================================================================================
+
+Yellowduck is an Industrial Shipment Tracking Platform built with Next.js 14, 
+React 18, Tailwind CSS, Firebase, and Lucide Icons. The application is designed 
+for managing and tracking international freight shipments with a focus on real-time 
+tracking, customs clearance, and facility management.
+
+================================================================================
+PROJECT TECHNOLOGY STACK
+================================================================================
+
+DEPENDENCIES:
+- Next.js: 14.2.0 (React framework with App Router)
+- React: 18.3.1 (UI library)
+- Firebase: 12.13.0 (Backend database and authentication)
+- Tailwind CSS: 4 (Utility-first CSS framework)
+- Lucide React: 1.16.0 (Icon library)
+- Zod: 4.4.3 (TypeScript-first schema validation)
+- clsx: 2.1.1 (Utility for conditional CSS classes)
+
+DEV DEPENDENCIES:
+- ESLint: 9 (Code linting)
+- Babel Plugin React Compiler: 1.0.0 (React optimization)
+- Tailwind CSS PostCSS: 4 (PostCSS integration)
+
+================================================================================
+DIRECTORY STRUCTURE
+================================================================================
+
+app/
+├── layout.js                    # Root layout with Navbar
+├── globals.css                  # Global styles
+├── loading.js                   # Global loading state
+├── (public)/                    # Public routes (no auth required)
+│   ├── page.js                  # Landing/Home page
+│   ├── about/page.js            # About page (template)
+│   ├── contact/page.js          # Contact page (empty)
+│   ├── pricing/page.js          # Pricing page (empty)
+│   └── track/[id]/              # Dynamic tracking page
+│       ├── page.js              # Tracking details page
+│       ├── error.js             # Error boundary component
+│       └── loading.js           # Loading state
+├── admin/                       # Admin dashboard
+│   ├── layout.js                # Admin layout
+│   ├── page.js                  # Admin overview/dashboard
+│   ├── analytics/page.js        # Analytics page (template)
+│   ├── customs/page.js          # Customs management (template)
+│   ├── drivers/                 # Drivers section (empty)
+│   ├── exceptions/page.js       # Exceptions management (template)
+│   ├── facilities/page.js       # Facility management
+│   ├── manifests/page.js        # Manifests management (template)
+│   ├── shipments/page.js        # Shipments management (template)
+│   └── users/page.js            # Users management (template)
+├── auth/                        # Authentication routes
+│   ├── login/page.js            # Login page (template)
+│   └── register/page.js         # Registration page (template)
+├── dashboard/                   # User dashboard
+│   ├── layout.js                # Dashboard layout
+│   ├── page.js                  # Dashboard overview
+│   ├── components/
+│   │   └── Navbar.jsx           # Dashboard topbar component
+│   ├── create/page.js           # Create shipment wizard
+│   ├── shipments/page.js        # My shipments list (empty)
+│   ├── invoices/page.js         # Invoices page (template)
+│   ├── settings/page.js         # Settings page (empty)
+│   └── tracking/page.js         # Personal tracking (empty)
+└── api/                         # API routes
+    ├── shipments/               # Shipments endpoints (empty)
+    ├── track/                   # Tracking endpoints (empty)
+    └── webhooks/                # Webhook handlers (empty)
+
+components/
+├── Logo.js                      # Yellowduck logo component
+├── nav/
+│   ├── Navbar.jsx               # Main navigation bar
+│   ├── Sidebar.js               # Dashboard sidebar
+│   ├── Testnav.jsx              # Test navigation component
+│   ├── nav-item.jsx             # Navigation item component
+│   ├── nav-section.jsx          # Navigation section component
+│   ├── mobile-drawer.jsx        # Mobile menu drawer
+│   └── use-lock-body-scroll.js  # Hook for mobile menu scroll lock
+└── tracking/                    # Tracking related components
+
+lib/
+├── firebase/
+│   ├── client.js                # Firebase client config
+│   └── firestore.js             # Firestore helpers
+├── logistics/
+│   ├── statusMachine.js         # Shipment status state machine
+│   └── pricing/
+│       ├── calculateChargeableWeight.js
+│       └── calculateVolumetricWeight.js
+├── validators/
+│   └── shipment.schema.js       # Zod schema for shipment validation
+└── validators.js                # General validators
+
+constants/
+└── index.js                     # All application constants and data
+
+services/
+└── shipment.service.js          # Shipment business logic
+
+================================================================================
+PAGES & FEATURES
+================================================================================
+
+PUBLIC PAGES (app/(public)/)
+-----------------------------
+
+HOME PAGE (page.js)
+Status: FULLY IMPLEMENTED
+Features:
+- Hero section with tracking input
+- Feature cards (Global Reach, Real-Time Tracking, Secure Handling)
+- Trusted by companies section
+- CTA banner
+- Footer with company/social links
+Components:
+- TrackingInput() - Form with search functionality
+- FeatureCard() - Reusable feature display
+- FooterColumn() - Footer layout helper
+State Management:
+- useState for tracking input value and loading state
+Data:
+- Imports from /constants: HERO, FEATURES_SECTION, FEATURES, TRUSTED_BY, CTA_BANNER
+
+TRACKING PAGE (track/[id]/page.js)
+Status: FULLY IMPLEMENTED with mock data
+Features:
+- Dynamic shipment details display
+- Multiple status tracking steps (PICKED_UP, IN_TRANSIT, CUSTOMS_HOLD, etc.)
+- Shipment metadata (weight, dimensions, insurance, value)
+- Sender/recipient information
+- Progress visualization (65%)
+- Expandable timeline of events
+- Copy tracking ID functionality
+Mock Data:
+- MOCK_SHIPMENT with fields: id, status, statusLabel, origin, destination, 
+  eta, etaWindow, service, carrier, weight, dimensions, declared_value, 
+  insurance, sender, recipient, progress
+- STEPS array with 8 tracking statuses
+
+ERROR PAGE (track/[id]/error.js)
+Status: FULLY IMPLEMENTED
+Features:
+- User-friendly error display
+- "Try Again" button (calls reset())
+- "New Search" link
+- "Back to Home" link
+- Error message display with gradient background
+
+TEMPLATE/EMPTY PAGES:
+- About (about/page.js) - Minimal template
+- Contact (contact/page.js) - Empty
+- Pricing (pricing/page.js) - Empty
+
+
+ADMIN PAGES (app/admin/)
+------------------------
+
+ADMIN DASHBOARD (page.js)
+Status: FULLY IMPLEMENTED with mock data
+Features:
+- Global metrics cards (Active Shipments, In-Flight, Customs Holds, Delays, etc.)
+- Delayed shipments list with severity indicators
+- Customs holds table
+- Facility throughput stats
+Mock Data:
+- GLOBAL_METRICS[] - 8 metric cards
+- DELAYED[] - 4 delayed shipment records
+- CUSTOMS_HOLDS[] - 3 customs hold records
+- FACILITY_THROUGHPUT[] - Facility performance data
+
+FACILITIES MANAGEMENT (facilities/page.js)
+Status: FULLY IMPLEMENTED with mock data
+Features:
+- Summary cards (Total, Online, Degraded, Offline facilities)
+- Facilities table with detailed information
+- Status indicators (ONLINE, DEGRADED, OFFLINE)
+- Throughput and capacity monitoring
+- Facility location details
+Mock Data:
+- SUMMARY[] - 4 summary cards
+- FACILITIES[] - Multiple facility records with properties:
+  code, name, country, flag, timezone, type, status, throughput, 
+  inbound, outbound, capacity, managed_by, last_updated
+
+TEMPLATE/EMPTY ADMIN PAGES:
+- Analytics (analytics/page.js) - Empty template
+- Customs (customs/page.js) - Empty template
+- Exceptions (exceptions/page.js) - Empty template
+- Manifests (manifests/page.js) - Empty template
+- Shipments (shipments/page.js) - Empty template
+- Users (users/page.js) - Empty template
+
+
+DASHBOARD PAGES (app/dashboard/)
+--------------------------------
+
+DASHBOARD OVERVIEW (page.js)
+Status: FULLY IMPLEMENTED with mock data
+Features:
+- User metrics (Total Shipments, In Transit, Delivered, Returns)
+- Recent activity/shipments list
+- Quick action links
+- Performance trends
+Mock Data:
+- METRICS[] - Performance indicators
+- SHIPMENTS[] - Recent shipment records
+- QUICK_ACTIONS[] - Action links
+
+CREATE SHIPMENT (create/page.js)
+Status: FULLY IMPLEMENTED multi-step form
+Features:
+- 7-step wizard form:
+  1. Sender information
+  2. Recipient information
+  3. Package details
+  4. Customs declaration
+  5. Pricing options
+  6. Payment method
+  7. Order confirmation
+- Step progress indicator
+- Form validation
+- Navigation between steps
+Form Components:
+- Label() - for form labels with required indicator
+- Input() - styled input field
+- Step-specific forms for each section
+
+TEMPLATE/EMPTY DASHBOARD PAGES:
+- Shipments (shipments/page.js) - Empty
+- Invoices (invoices/page.js) - Template
+- Settings (settings/page.js) - Empty
+- Tracking (tracking/page.js) - Empty
+
+
+AUTHENTICATION PAGES (app/auth/)
+---------------------------------
+
+LOGIN PAGE (login/page.js)
+Status: TEMPLATE with placeholder
+
+REGISTER PAGE (register/page.js)
+Status: TEMPLATE with placeholder
+
+================================================================================
+GLOBAL COMPONENTS
+================================================================================
+
+LOGO COMPONENT (components/Logo.js)
+Type: Utility component
+Props:
+- size: "sm" | "md" | "lg" (default: "md")
+- variant: "full" | "mark" (default: "full")
+- theme: "dark" | "light" (default: "dark")
+Features:
+- SVG-based minimalist duck mark
+- Wordmark text
+- Responsive scaling
+- Color theming (Dark Navy #0F172A + Electric Amber #FFB800)
+
+NAVBAR COMPONENT (components/nav/Navbar.jsx)
+Type: Navigation header
+Features:
+- Sticky header with scroll detection
+- Backdrop blur effect on scroll
+- Responsive design (desktop & mobile)
+- Mobile menu drawer
+- Logo branding
+- Desktop navigation links
+- Track package CTA button
+- Auth links (Login/Sign up)
+State:
+- mobileOpen - Mobile menu visibility
+- scrolled - Scroll position state
+Responsive Behavior:
+- Desktop: Full horizontal navbar with all options
+- Mobile: Hamburger menu with drawer navigation
+- Body scroll lock when mobile menu open
+
+SIDEBAR COMPONENT (components/nav/Sidebar.js)
+Type: Navigation sidebar
+Used in admin and dashboard layouts
+
+================================================================================
+CONSTANTS & DATA (constants/index.js)
+================================================================================
+
+NAVIGATION CONSTANTS:
+- PUBLIC_NAV_LINKS: Array of public page links
+  (Solutions, Pricing, Enterprise, Developers, Blog)
+- PUBLIC_NAV_CTA: Track Package button link
+- PUBLIC_NAV_AUTH: Login/Sign up links
+- SIDEBAR_MAIN_LINKS: Dashboard navigation
+  (Overview, Shipments, Create, Tracking, Invoices, etc.)
+- SIDEBAR_SECONDARY_LINKS: Dashboard secondary actions
+  (Notifications, Team, Billing, Settings, Help)
+- SIDEBAR_ADMIN_LINKS: Admin panel navigation
+
+CONTENT CONSTANTS:
+- HERO: Home page hero section
+  Headline, subheadline, tracking placeholder
+  Stats: 180+ countries, 2.4M packages monthly, 99.97% on-time, <1s latency
+- FEATURES_SECTION: Features section metadata
+- FEATURES: Array of 3 main features
+  (Global Reach, Real-Time Tracking, Secure Handling)
+- TRUSTED_BY: Social proof companies
+- CTA_BANNER: Call-to-action section
+
+FOOTER CONSTANTS:
+- FOOTER_COLUMNS: 3 column groups (Company, Services, Support)
+- FOOTER_SOCIALS: Social media links (Twitter, LinkedIn, GitHub, Facebook)
+- FOOTER_CONTACT: Contact info (Email, Phone)
+- FOOTER_LEGAL: Legal links (Privacy, Terms, Cookies, GDPR)
+- FOOTER_META: Tagline and copyright
+
+================================================================================
+SERVICES & BUSINESS LOGIC
+================================================================================
+
+SHIPMENT SERVICE (services/shipment.service.js)
+Function: async createShipment(data)
+- Creates new shipment in Firestore
+- Adds createdAt and updatedAt timestamps server-side
+- Returns document reference
+
+================================================================================
+VALIDATION & SCHEMAS
+================================================================================
+
+VALIDATION SCHEMA (lib/validators/shipment.schema.js)
+shipmentSchema (Zod):
+- receiverName: string, min 2 chars
+- weightKg: positive number
+- length, width, height: positive numbers
+
+GENERAL VALIDATORS (lib/validators.js)
+- Contains utility validation functions
+
+================================================================================
+KEY FEATURES & FUNCTIONALITY
+================================================================================
+
+1. REAL-TIME TRACKING
+   - Dynamic tracking page with shipment status
+   - 8-step tracking timeline
+   - Progress visualization
+   - Mock data implementation
+
+2. SHIPMENT MANAGEMENT
+   - Create multi-step shipment form
+   - 7-step wizard with validation
+   - Dashboard overview of shipments
+   - Admin shipment monitoring
+
+3. FACILITY MANAGEMENT
+   - Monitor 44 global facilities
+   - Track facility status (Online, Degraded, Offline)
+   - Throughput and capacity management
+   - Location-based organization
+
+4. CUSTOMS MANAGEMENT
+   - Hold tracking and monitoring
+   - Commodity classification
+   - Country-specific regulations
+   - Document management
+
+5. ANALYTICS & REPORTING
+   - Global metrics dashboard
+   - Facility performance stats
+   - Delayed shipment tracking
+   - Exception management
+
+6. USER ACCOUNT MANAGEMENT
+   - Login/Register pages (templates)
+   - Dashboard for users
+   - Settings management
+   - Billing and invoicing
+
+================================================================================
+STATE MANAGEMENT & HOOKS
+================================================================================
+
+- useState: Used throughout pages for form inputs, toggles, and UI state
+- useEffect: Used in Navbar for scroll detection and body scroll locking
+- Custom Hooks: useLockBodyScroll() for mobile menu
+
+================================================================================
+STYLING APPROACH
+================================================================================
+
+Primary Framework: Tailwind CSS v4
+Class Utilities: clsx for conditional styling
+
+Design System:
+Color Palette:
+- Primary: Electric Amber (#FFB800)
+- Dark Navy: (#0F172A)
+- Grays: (#0B1120, #1E293B, #334155, #475569, #64748B, #94A3B8, 
+         #CBD5E1, #E2E8F0, #F8FAFC)
+Spacing: Tailwind standard rem-based system
+Rounded corners: Consistent use of rounded-lg and rounded-xl
+Shadows: Subtle shadows on interactive elements
+
+================================================================================
+DEVELOPMENT STATUS
+================================================================================
+
+FULLY IMPLEMENTED PAGES:
+✅ Home/Landing (Public)
+✅ Tracking Details (Public)
+✅ Error Boundary (Tracking)
+✅ Admin Dashboard
+✅ Facilities Management
+✅ Dashboard Overview
+✅ Create Shipment Wizard (7-step form)
+✅ Navbar (Global)
+
+TEMPLATE/PLACEHOLDER PAGES:
+⚠️  About, Contact, Pricing (Public)
+⚠️  Analytics, Customs, Exceptions, Manifests, Shipments, Users (Admin)
+⚠️  Settings, Shipments, Invoices, Tracking (Dashboard)
+⚠️  Login, Register (Auth)
+
+EMPTY/PENDING IMPLEMENTATION:
+🔲 API Routes (shipments, track, webhooks)
+🔲 Mobile Drawer Navigation
+🔲 Dashboard Components Library
+
+================================================================================
+FUTURE IMPLEMENTATION PRIORITIES
+================================================================================
+
+1. API Endpoints
+   Implement REST/GraphQL API for shipment operations
+
+2. Authentication
+   Complete login/register flows with Firebase Auth
+
+3. Backend Integration
+   Replace mock data with Firestore queries
+
+4. Webhook System
+   Set up webhook handlers for external integrations
+
+5. Component Library
+   Create reusable tracking/shipment components
+
+6. Testing
+   Add unit and integration tests
+
+7. Performance
+   Optimize images, implement lazy loading
+
+8. Accessibility
+   Add ARIA labels and keyboard navigation
+
+================================================================================
+PROJECT STRUCTURE NOTES
+================================================================================
+
+The project uses Next.js App Router with the following route groups:
+- (public): Public-facing pages
+- admin: Admin-only pages
+- dashboard: User dashboard pages
+- auth: Authentication pages
+- api: Backend API routes
+
+All pages follow the client-side rendering pattern with "use client" directive
+where interactivity is needed. Mock data is used throughout for demonstration,
+with actual Firestore integration ready for production use.
+
+The application uses a modular component structure with reusable components
+for navigation, forms, and data display. The Tailwind CSS utility classes
+provide consistent styling across all pages.
+
+================================================================================

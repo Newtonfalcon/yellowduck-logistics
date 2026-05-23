@@ -1,26 +1,143 @@
 @import "tailwindcss";
 
-:root {
-  --background: #ffffff;
-  --foreground: #171717;
-}
 
-@theme inline {
-  --color-background: var(--background);
-  --color-foreground: var(--foreground);
-  --font-sans: var(--font-geist-sans);
-  --font-mono: var(--font-geist-mono);
-}
+/* =========================
+   BASE
+========================= */
 
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
-  }
-}
-
+html,
 body {
-  background: var(--background);
-  color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
+  background: #C0C0C0;
+  color: black;
+  font-family: "MS Sans Serif", Tahoma, sans-serif;
+  margin: 0;
+  padding: 0;
+}
+
+/* =========================
+   TYPOGRAPHY
+========================= */
+
+.tracking-font {
+  font-family: "Courier New", monospace;
+  letter-spacing: 2px;
+  font-weight: bold;
+}
+
+/* =========================
+   WINDOWS 95 PANEL
+========================= */
+
+.panel {
+  background: #C0C0C0;
+
+  border-top: 4px solid #FFFFFF;
+  border-left: 4px solid #FFFFFF;
+
+  border-right: 4px solid #404040;
+  border-bottom: 4px solid #404040;
+
+  padding: 12px;
+}
+
+/* =========================
+   INSET INPUTS
+========================= */
+
+.inset-field {
+  background: white;
+
+  border-top: 4px solid #404040;
+  border-left: 4px solid #404040;
+
+  border-right: 4px solid #FFFFFF;
+  border-bottom: 4px solid #FFFFFF;
+
+  padding: 10px;
+
+  font-family: "Courier New", monospace;
+}
+
+/* =========================
+   INDUSTRIAL BUTTONS
+========================= */
+
+.yd-button {
+  background: #FFD700;
+  color: black;
+
+  border-top: 4px solid #FFFFCC;
+  border-left: 4px solid #FFFFCC;
+
+  border-right: 4px solid #806000;
+  border-bottom: 4px solid #806000;
+
+  padding: 10px 18px;
+
+  font-weight: bold;
+  text-transform: uppercase;
+
+  cursor: pointer;
+}
+
+.yd-button:active {
+  border-top: 4px solid #806000;
+  border-left: 4px solid #806000;
+
+  border-right: 4px solid #FFFFCC;
+  border-bottom: 4px solid #FFFFCC;
+}
+
+/* =========================
+   ALERT BOXES
+========================= */
+
+.system-alert {
+  background: black;
+  color: #FFD700;
+
+  border: 4px solid #FFD700;
+
+  padding: 12px;
+
+  font-family: "Courier New", monospace;
+
+  text-transform: uppercase;
+}
+
+/* =========================
+   DATA TABLES
+========================= */
+
+.data-grid {
+  width: 100%;
+  border-collapse: collapse;
+}
+
+.data-grid th {
+  background: #808080;
+  color: white;
+
+  border: 3px solid black;
+
+  padding: 8px;
+  text-align: left;
+}
+
+.data-grid td {
+  background: #C0C0C0;
+
+  border: 2px solid #404040;
+
+  padding: 8px;
+}
+
+/* =========================
+   DIVIDER LINES
+========================= */
+
+.hr-industrial {
+  border: none;
+  border-top: 4px solid #808080;
+  margin: 12px 0;
 }

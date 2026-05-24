@@ -196,48 +196,37 @@ export async function getUserShipments({
   }
 
   const ref = collection(db, COLLECTION);
+  const fieldName = userId ? "customerId" : "sender.email";
+  const fieldValue = userId ? userId : userEmail;
+  const fetchLimit = statusFilter ? pageSize * 4 : pageSize + 1;
 
-  const buildConstraints = (fieldName, fieldValue) => {
-    const constraints = [];
-
-    if (fieldName && fieldValue) {
-      constraints.push(where(fieldName, "==", fieldValue));
-    }
-
-    if (statusFilter) {
-      constraints.push(where("currentStatus", "==", statusFilter));
-    }
-
-    constraints.push(orderBy("createdAt", "desc"));
-    constraints.push(limit(pageSize + 1));
-
-    if (lastDoc) {
-      constraints.push(startAfter(lastDoc));
-    }
-
-    return constraints;
-  };
-
-  let snap;
-
-  if (userId) {
-    snap = await getDocs(query(ref, ...buildConstraints("customerId", userId)));
-
-    if (snap.docs.length === 0 && userEmail) {
-      snap = await getDocs(query(ref, ...buildConstraints("sender.email", userEmail)));
-    }
-  } else {
-    snap = await getDocs(query(ref, ...buildConstraints("sender.email", userEmail)));
+  if (!fieldValue) {
+    throw new Error("getUserShipments requires a userId or userEmail");
   }
 
-  const hasMore = snap.docs.length > pageSize;
-  const docs = hasMore ? snap.docs.slice(0, pageSize) : snap.docs;
-  const lastSnap = docs.length > 0 ? docs[docs.length - 1] : null;
+  const snap = await getDocs(query(ref, where(fieldName, "==", fieldValue), limit(fetchLimit)));
 
-  const shipments = docs.map((d) => ({
-    id: d.id,
-    ...d.data(),
-  }));
+  let shipments = snap.docs.map((docSnap) => ({ id: docSnap.id, ...docSnap.data() }));
+
+  if (statusFilter) {
+    shipments = shipments.filter((shipment) => shipment.currentStatus === statusFilter);
+  }
+
+  shipments.sort((a, b) => {
+    const aTime = a.createdAt?.toMillis ? a.createdAt.toMillis() : new Date(a.createdAt).getTime();
+    const bTime = b.createdAt?.toMillis ? b.createdAt.toMillis() : new Date(b.createdAt).getTime();
+    return bTime - aTime;
+  });
+
+  const hasMore = shipments.length > pageSize;
+  const pageShipments = shipments.slice(0, pageSize);
+  const lastSnap = null;
+
+  return {
+    shipments: pageShipments,
+    lastDoc: lastSnap,
+    hasMore,
+  };
 
   return {
     shipments,

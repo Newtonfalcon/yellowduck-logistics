@@ -35,9 +35,11 @@ import {
   collection,
   onSnapshot,
   query,
-  orderBy
-}
-from "firebase/firestore";
+  orderBy,
+  where,
+  limit,
+  getDocs,
+} from "firebase/firestore";
 
 import { db }
 from "@/lib/firebase/client";
@@ -47,26 +49,6 @@ from "@/lib/firebase/client";
 
 
 
-
-// ─── Mock Data ─────────────────────────────────────────────────────────────────
-const MOCK_SHIPMENT = {
-  id: "YDK-INTL-000182",
-  status: "IN_TRANSIT",
-  statusLabel: "In Transit",
-  origin: { city: "Lagos", country: "Nigeria", code: "LOS" },
-  destination: { city: "New York", country: "United States", code: "JFK" },
-  eta: "Jun 2, 2026",
-  etaWindow: "2:00 PM – 6:00 PM",
-  service: "Express International",
-  carrier: "Yellowduck Air Network",
-  weight: "3.4 kg",
-  dimensions: "28 × 18 × 12 cm",
-  declared_value: "$420.00",
-  insurance: "Included",
-  sender: "Chidi Okeke · Lagos, Nigeria",
-  recipient: "Marcus Webb · New York, NY",
-  progress: 65, // 0–100
-};
 
 const STEPS = [
   { key: "PICKED_UP",           label: "Picked Up",           icon: Package },
@@ -86,70 +68,53 @@ const STEP_INDEX = {
   DELIVERED: 5,
 };
 
-const MOCK_TIMELINE = [
-  {
-    id: 1,
-    status: "IN_TRANSIT",
-    label: "Departed London Heathrow",
-    location: "London Heathrow Hub · LHR-HUB-01",
-    time: "Today, 2:10 PM",
-    detail: "Flight YD4421 — Estimated arrival JFK 11:55 PM",
-    icon: Plane,
-    type: "milestone",
-  },
-  {
-    id: 2,
-    status: "CUSTOMS_CLEARANCE",
-    label: "Customs Cleared — UK Export",
-    location: "London Heathrow, United Kingdom",
-    time: "Today, 11:45 AM",
-    detail: "HS Code 8471.30 · Duties verified",
-    icon: Shield,
-    type: "normal",
-  },
-  {
-    id: 3,
-    status: "IN_TRANSIT",
-    label: "Arrived at Transit Hub",
-    location: "London Heathrow Hub · LHR-HUB-01",
-    time: "Yesterday, 11:30 PM",
-    detail: "Transferred from Lagos inbound flight YD1182",
-    icon: Warehouse,
-    type: "normal",
-  },
-  {
-    id: 4,
-    status: "CUSTOMS_CLEARANCE",
-    label: "Customs Cleared — Nigeria Export",
-    location: "Lagos Murtala Muhammed Airport, Nigeria",
-    time: "Yesterday, 4:00 PM",
-    detail: "Export documentation verified. Approved.",
-    icon: Shield,
-    type: "normal",
-  },
-  {
-    id: 5,
-    status: "PICKED_UP",
-    label: "Package Picked Up",
-    location: "Lagos, Nigeria",
-    time: "Yesterday, 8:20 AM",
-    detail: "Collected by Yellowduck courier #YD-NGR-44",
-    icon: Package,
-    type: "normal",
-  },
-  {
-    id: 6,
-    status: "LABEL_CREATED",
-    label: "Label Created",
-    location: "Yellowduck System",
-    time: "May 21, 2026 · 3:14 PM",
-    detail: "Shipment booked. Awaiting pickup.",
-    icon: Package,
-    type: "normal",
-  },
-];
+const EVENT_ICON_BY_STATUS = {
+  LABEL_CREATED: Package,
+  PICKED_UP: Package,
+  CUSTOMS_CLEARANCE: Shield,
+  CUSTOMS_HOLD: Shield,
+  IN_TRANSIT: Plane,
+  ARRIVED_DESTINATION: Warehouse,
+  OUT_FOR_DELIVERY: Truck,
+  DELIVERED: CheckCircle2,
+  EXCEPTION: AlertTriangle,
+};
 
-const EXCEPTIONS = []; 
+const PROGRESS_PERCENT = {
+  LABEL_CREATED: 10,
+  PICKED_UP: 25,
+  CUSTOMS_CLEARANCE: 40,
+  CUSTOMS_HOLD: 40,
+  IN_TRANSIT: 60,
+  ARRIVED_DESTINATION: 80,
+  OUT_FOR_DELIVERY: 90,
+  DELIVERED: 100,
+  EXCEPTION: 50,
+};
+
+function getProgressPercent(status) {
+  return PROGRESS_PERCENT[status] ?? 50;
+}
+
+function formatEventDate(timestamp) {
+  if (!timestamp) return "Unknown time";
+  if (typeof timestamp.toDate === "function") {
+    return timestamp.toDate().toLocaleString("en-US", {
+      month: "short",
+      day: "numeric",
+      year: "numeric",
+      hour: "numeric",
+      minute: "2-digit",
+    });
+  }
+  return new Date(timestamp).toLocaleString("en-US", {
+    month: "short",
+    day: "numeric",
+    year: "numeric",
+    hour: "numeric",
+    minute: "2-digit",
+  });
+}
 
 
 const STATUS_CONFIG = {
@@ -301,8 +266,7 @@ function DetailRow({ icon: Icon, label, value }) {
 
 // ─── Main Page ────────────────────────────────────────────────────────────────
 export default function TrackingPage({ params }) {
-  const trackingId = params?.id || "YDK-INTL-000182";
-  const ship = MOCK_SHIPMENT;
+  const trackingId = params?.id || "";
   const [copied, setCopied] = useState(false);
   const [showAll, setShowAll] = useState(false);
   
@@ -312,98 +276,149 @@ export default function TrackingPage({ params }) {
   const [shipment, setShipment] = useState(null);
 
   const [events, setEvents] = useState([]);
-
-  const [loading, setLoading] =useState(true);
-
-  const [error, setError] = useState(null);
+  const [loading, setLoading] = useState(Boolean(trackingId));
+  const [error, setError] = useState(trackingId ? null : "Tracking ID not provided.");
 
   useEffect(() => {
+    if (!trackingId) {
+      return;
+    }
 
-  const shipmentRef = doc(
-    db,
-    "shipments",
-    trackingId
-  );
+    const shipmentRef = doc(db, "shipments", trackingId);
 
-  const unsubShipment =
-    onSnapshot(
-
+    const unsubscribe = onSnapshot(
       shipmentRef,
-
-      (snapshot) => {
-
-        if (!snapshot.exists()) {
-
-          setError(
-            "Tracking ID not found"
-          );
-
+      async (snapshot) => {
+        if (snapshot.exists()) {
+          setShipment({ id: snapshot.id, ...snapshot.data() });
           setLoading(false);
-
           return;
         }
 
-        setShipment(snapshot.data());
+        try {
+          const fallbackQuery = query(
+            collection(db, "shipments"),
+            where("trackingNumber", "==", trackingId),
+            limit(1)
+          );
+          const fallbackSnapshot = await getDocs(fallbackQuery);
 
-        setLoading(false);
+          if (!fallbackSnapshot.empty) {
+            const docSnap = fallbackSnapshot.docs[0];
+            setShipment({ id: docSnap.id, ...docSnap.data() });
+            setLoading(false);
+            return;
+          }
+
+          setError("Tracking ID not found.");
+          setLoading(false);
+        } catch (err) {
+          console.error(err);
+          setError("Failed to load shipment.");
+          setLoading(false);
+        }
       },
-
       (err) => {
-
         console.error(err);
-
-        setError(
-          "Failed to load shipment"
-        );
-
+        setError("Failed to load shipment.");
         setLoading(false);
       }
     );
 
-  return () => unsubShipment();
-
-}, [trackingId]);
+    return () => unsubscribe();
+  }, [trackingId]);
 
 
   useEffect(() => {
+    if (!shipment?.id) {
+      return;
+    }
 
-  const eventsRef = collection(
-    db,
-    "shipments",
-    trackingId,
-    "events"
-  );
+    const eventsRef = collection(db, "shipments", shipment.id, "events");
+    const q = query(eventsRef, orderBy("timestamp", "desc"));
 
-  const q = query(
-    eventsRef,
-    orderBy("timestamp", "desc")
-  );
-
-  const unsubEvents =
-    onSnapshot(q, (snapshot) => {
-
-      const eventData =
-        snapshot.docs.map((doc) => ({
-          id: doc.id,
-          ...doc.data()
-        }));
+    const unsubEvents = onSnapshot(q, (snapshot) => {
+      const eventData = snapshot.docs.map((doc) => ({
+        id: doc.id,
+        ...doc.data(),
+      }));
 
       setEvents(eventData);
+    }, (err) => {
+      console.error(err);
     });
 
-  return () => unsubEvents();
+    return () => unsubEvents();
+  }, [shipment?.id]);
 
-}, [trackingId]);
+  const timelineEvents = (shipment?.id ? events : []).map((event) => ({
+    id: event.id,
+    status: event.status,
+    label: event.description || STATUS_CONFIG[event.status]?.label || event.status,
+    location: event.location || STATUS_CONFIG[event.status]?.label || "Unknown location",
+    time: formatEventDate(event.timestamp),
+    detail: event.author ? `Updated by ${event.author}` : undefined,
+    icon: EVENT_ICON_BY_STATUS[event.status] ?? Package,
+    type: event.status === "EXCEPTION" ? "warn" : "normal",
+  }));
 
+  const visibleEvents = showAll ? timelineEvents : timelineEvents.slice(0, 3);
+  const exceptions = timelineEvents.filter((event) => event.status === "EXCEPTION");
 
-
-  const visibleEvents = showAll ? MOCK_TIMELINE : MOCK_TIMELINE.slice(0, 3);
+  const originText = shipment?.sender?.address?.city || shipment?.sender?.address?.country || "Unknown";
+  const destinationText = shipment?.recipient?.address?.city || shipment?.recipient?.address?.country || "Unknown";
+  const serviceText = shipment?.pricing?.serviceCode || "Standard";
+  const etaText = shipment?.pricing?.etaDays != null ? `In ${shipment.pricing.etaDays} days` : shipment?.pricing?.etaDate || "TBD";
+  const carrierText = shipment?.carrier || "Yellowduck Logistics";
+  const progressValue = shipment?.progress != null ? shipment.progress : getProgressPercent(shipment?.currentStatus);
+  const weightText = shipment?.package?.weightKg ? `${shipment.package.weightKg} kg` : "TBD";
+  const dimensionsText = shipment?.package?.dimensions
+    ? `${shipment.package.dimensions.lengthCm} × ${shipment.package.dimensions.widthCm} × ${shipment.package.dimensions.heightCm} cm`
+    : "TBD";
+  const declaredValueText = shipment?.customs?.declaredValueUSD ? `$${shipment.customs.declaredValueUSD}` : "TBD";
+  const insuranceText = shipment?.pricing?.addInsurance ? "Included" : "Not included";
+  const senderText = shipment?.sender?.name
+    ? `${shipment.sender.name} · ${[shipment.sender.address?.city, shipment.sender.address?.country].filter(Boolean).join(", ")}`
+    : "Unknown";
+  const recipientText = shipment?.recipient?.name
+    ? `${shipment.recipient.name} · ${[shipment.recipient.address?.city, shipment.recipient.address?.country].filter(Boolean).join(", ")}`
+    : "Unknown";
 
   const handleCopy = () => {
-    navigator.clipboard.writeText(ship.id);
+    navigator.clipboard.writeText(shipment?.trackingNumber || trackingId);
     setCopied(true);
     setTimeout(() => setCopied(false), 2000);
   };
+
+  if (loading) {
+    return (
+      <div className="min-h-screen bg-[#F8FAFC]">
+        <main className="max-w-5xl mx-auto px-4 sm:px-6 lg:px-8 pt-24 pb-16">
+          <div className="bg-white rounded-2xl border border-[#E2E8F0] p-8 shadow-sm text-center">
+            <p className="text-sm text-[#64748B]">Loading shipment details…</p>
+          </div>
+        </main>
+      </div>
+    );
+  }
+
+  if (error) {
+    return (
+      <div className="min-h-screen bg-[#F8FAFC]">
+        <main className="max-w-5xl mx-auto px-4 sm:px-6 lg:px-8 pt-24 pb-16">
+          <div className="bg-white rounded-2xl border border-red-200 p-8 shadow-sm text-center">
+            <p className="text-sm font-semibold text-red-700 mb-4">{error}</p>
+            <Link
+              href="/"
+              className="inline-flex items-center justify-center rounded-full bg-[#FFB800] px-4 py-2 text-sm font-semibold text-[#0F172A] hover:bg-[#F0AE00] transition-colors"
+            >
+              Back to home
+            </Link>
+          </div>
+        </main>
+      </div>
+    );
+  }
 
   return (
     <div className="min-h-screen bg-[#F8FAFC]">
@@ -426,7 +441,7 @@ export default function TrackingPage({ params }) {
             <div className="space-y-2">
               <div className="flex items-center gap-3 flex-wrap">
                 <h1 className="text-2xl sm:text-3xl font-extrabold text-[#0F172A] tracking-tight">
-                  {shipment?.id || "YDK-INTL-000182"  }
+                  {shipment?.trackingNumber || shipment?.id || trackingId}
                 </h1>
                 <button
                   onClick={handleCopy}
@@ -441,16 +456,16 @@ export default function TrackingPage({ params }) {
               </div>
 
               <div className="flex items-center gap-2 text-sm text-[#64748B]">
-                <span className="font-medium text-[#334155]">{shipment?.origin?.city || ship.origin.city}</span>
+                <span className="font-medium text-[#334155]">{originText}</span>
                 <span className="text-[#CBD5E1]">→</span>
-                <span className="font-medium text-[#334155]">{shipment?.destination?.city || ship.destination.city}</span>
+                <span className="font-medium text-[#334155]">{destinationText}</span>
                 <span className="hidden sm:inline text-[#CBD5E1]">·</span>
-                <span className="hidden sm:inline">{shipment?.service || ship.service}</span>
+                <span className="hidden sm:inline">{serviceText}</span>
               </div>
             </div>
 
             <div className="flex flex-col items-start sm:items-end gap-2">
-              <StatusBadge status={shipment?.status || ship.status} pulse={shipment?.status === "IN_TRANSIT" || ship.status === "IN_TRANSIT"} />
+              <StatusBadge status={shipment?.currentStatus || "LABEL_CREATED"} pulse={(shipment?.currentStatus || "LABEL_CREATED") === "IN_TRANSIT"} />
               <button className="inline-flex items-center gap-1.5 text-xs text-[#94A3B8] hover:text-[#64748B] transition-colors">
                 <RefreshCw size={11} />
                 Refresh status
@@ -464,14 +479,14 @@ export default function TrackingPage({ params }) {
               <p className="text-xs font-semibold text-[#94A3B8] uppercase tracking-wide mb-1">
                 Estimated Delivery
               </p>
-              <p className="text-xl font-extrabold text-[#0F172A]">{shipment?.eta || ship.eta}</p>
-              <p className="text-sm text-[#64748B] mt-0.5">{shipment?.etaWindow || ship.etaWindow} · {shipment?.destination?.city || ship.destination.city}</p>
+              <p className="text-xl font-extrabold text-[#0F172A]">{etaText}</p>
+              <p className="text-sm text-[#64748B] mt-0.5">{destinationText}</p>
             </div>
             <div className="flex-1 bg-[#FFF8E6] border border-[#FFB800]/30 rounded-xl px-5 py-4">
               <p className="text-xs font-semibold text-[#92670A] uppercase tracking-wide mb-1">
                 Carrier
               </p>
-              <p className="text-sm font-bold text-[#0F172A]">{shipment?.carrier || ship.carrier}</p>
+              <p className="text-sm font-bold text-[#0F172A]">{carrierText}</p>
               <p className="text-sm text-[#64748B] mt-0.5">Flight YD4421 · In air</p>
             </div>
           </div>
@@ -480,18 +495,18 @@ export default function TrackingPage({ params }) {
         {/* ── Progress Stepper ─────────────────────────────────── */}
         <div className="mt-6 bg-white rounded-2xl border border-[#E2E8F0] p-6 sm:p-8 shadow-sm">
           <h2 className="text-sm font-semibold text-[#334155] mb-6">Shipment Progress</h2>
-          <ProgressStepper currentStatus={shipment?.status || ship.status} />
+          <ProgressStepper currentStatus={shipment?.currentStatus || "LABEL_CREATED"} />
 
           {/* Thin progress bar */}
           <div className="mt-6 bg-[#F1F5F9] rounded-full h-1.5 overflow-hidden">
             <div
               className="h-full bg-[#FFB800] rounded-full transition-all duration-700"
-              style={{ width: `${shipment?.progress || ship.progress}%` }}
+              style={{ width: `${progressValue}%` }}
             />
           </div>
           <div className="flex justify-between mt-1">
-            <span className="text-[11px] text-[#94A3B8]">{shipment?.origin?.city || ship.origin.city}</span>
-            <span className="text-[11px] text-[#94A3B8]">{shipment?.destination?.city || ship.destination.city}</span>
+            <span className="text-[11px] text-[#94A3B8]">{originText}</span>
+            <span className="text-[11px] text-[#94A3B8]">{destinationText}</span>
           </div>
         </div>
 
@@ -502,14 +517,14 @@ export default function TrackingPage({ params }) {
           <div className="lg:col-span-2 space-y-6">
 
             {/* Exceptions (shown only if any) */}
-            {EXCEPTIONS.length > 0 && (
+            {exceptions.length > 0 && (
               <div className="bg-red-50 border border-red-200 rounded-2xl p-5">
                 <div className="flex items-center gap-2 mb-3">
                   <AlertTriangle size={16} className="text-red-600" />
                   <h3 className="text-sm font-semibold text-red-700">Active Exception</h3>
                 </div>
-                {EXCEPTIONS.map((ex) => (
-                  <p key={ex.id} className="text-sm text-red-600">{ex.message}</p>
+                {exceptions.map((ex) => (
+                  <p key={ex.id} className="text-sm text-red-600">{ex.label}</p>
                 ))}
               </div>
             )}
@@ -546,11 +561,11 @@ export default function TrackingPage({ params }) {
                 </svg>
 
                 {/* Labels */}
-                <div className="absolute left-8 bottom-8 text-xs font-semibold text-[#0F172A]">Lagos, NG</div>
-                <div className="absolute right-8 bottom-10 text-xs font-semibold text-[#94A3B8]">New York, US</div>
+                <div className="absolute left-8 bottom-8 text-xs font-semibold text-[#0F172A]">{originText}</div>
+                <div className="absolute right-8 bottom-10 text-xs font-semibold text-[#94A3B8]">{destinationText}</div>
                 <div className="absolute top-4 left-1/2 -translate-x-1/2 flex items-center gap-2 bg-[#0F172A]/80 text-white px-3 py-1.5 rounded-full text-xs font-medium backdrop-blur-sm">
                   <Plane size={12} className="text-[#FFB800]" />
-                  Flight YD4421 · In air
+                  {carrierText} · In transit
                 </div>
 
                 {/* Map coming soon badge */}
@@ -576,7 +591,7 @@ export default function TrackingPage({ params }) {
                 ))}
               </div>
 
-              {MOCK_TIMELINE.length > 3 && (
+              {timelineEvents.length > 3 && (
                 <button
                   onClick={() => setShowAll((v) => !v)}
                   className="w-full mt-2 flex items-center justify-center gap-1.5 py-2.5 text-xs font-medium text-[#64748B] hover:text-[#0F172A] border border-[#E2E8F0] rounded-xl hover:bg-[#F8FAFC] transition-colors"
@@ -584,7 +599,7 @@ export default function TrackingPage({ params }) {
                   {showAll ? (
                     <><ChevronUp size={13} /> Show less</>
                   ) : (
-                    <><ChevronDown size={13} /> Show {MOCK_TIMELINE.length - 3} earlier events</>
+                    <><ChevronDown size={13} /> Show {timelineEvents.length - 3} earlier events</>
                   )}
                 </button>
               )}
@@ -598,10 +613,10 @@ export default function TrackingPage({ params }) {
             <div className="bg-white rounded-2xl border border-[#E2E8F0] p-6 shadow-sm">
               <h3 className="text-sm font-semibold text-[#334155] mb-1">Package Details</h3>
               <div className="mt-3">
-                <DetailRow icon={Weight}    label="Weight"        value={ship.weight} />
-                <DetailRow icon={Box}       label="Dimensions"    value={ship.dimensions} />
-                <DetailRow icon={Flag}      label="Declared Value" value={ship.declared_value} />
-                <DetailRow icon={Shield}    label="Insurance"     value={ship.insurance} />
+                <DetailRow icon={Weight}    label="Weight"        value={weightText} />
+                <DetailRow icon={Box}       label="Dimensions"    value={dimensionsText} />
+                <DetailRow icon={Flag}      label="Declared Value" value={declaredValueText} />
+                <DetailRow icon={Shield}    label="Insurance"     value={insuranceText} />
               </div>
             </div>
 
@@ -609,10 +624,10 @@ export default function TrackingPage({ params }) {
             <div className="bg-white rounded-2xl border border-[#E2E8F0] p-6 shadow-sm">
               <h3 className="text-sm font-semibold text-[#334155] mb-3">Route</h3>
               <div>
-                <DetailRow icon={User}      label="Sender"        value={ship.sender} />
-                <DetailRow icon={MapPin}    label="Recipient"     value={ship.recipient} />
-                <DetailRow icon={Truck}     label="Service"       value={ship.service} />
-                <DetailRow icon={Calendar}  label="ETA"           value={ship.eta} />
+                <DetailRow icon={User}      label="Sender"        value={senderText} />
+                <DetailRow icon={MapPin}    label="Recipient"     value={recipientText} />
+                <DetailRow icon={Truck}     label="Service"       value={serviceText} />
+                <DetailRow icon={Calendar}  label="ETA"           value={etaText} />
               </div>
             </div>
 

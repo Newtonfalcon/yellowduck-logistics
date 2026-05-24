@@ -9,12 +9,12 @@ export default function Error({ error, reset }) {
   }, [error]);
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-blue-50 to-indigo-100 px-4">
+    <div className="min-h-screen flex items-center justify-center bg-linear-to-br from-blue-50 to-indigo-100 px-4">
       <div className="text-center max-w-md">
         <div className="mb-6">
           <h1 className="text-6xl font-bold text-red-500 mb-2">Oops!</h1>
           <h2 className="text-2xl font-semibold text-gray-800 mb-3">
-            We couldn't find your shipment
+            We could not find your shipment
           </h2>
         </div>
 

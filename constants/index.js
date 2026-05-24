@@ -40,8 +40,8 @@ export const PUBLIC_NAV_CTA = {
 };
 
 export const PUBLIC_NAV_AUTH = {
-  login: { label: "Log in", href: "/login" },
-  signup: { label: "Get Started", href: "/signup" },
+  login: { label: "Log in", href: "/auth/login" },
+  signup: { label: "Get Started", href: "/auth/register" },
 };
 
 // ─── Dashboard Sidebar Navigation ────────────────────────────────────────────

@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from "react";
 import Link from "next/link";
+import dynamic from "next/dynamic";
 import {
   Package,
   MapPin,
@@ -41,14 +42,129 @@ import {
   getDocs,
 } from "firebase/firestore";
 
-import { db }
-from "@/lib/firebase/client";
+import { db } from "@/lib/firebase/client";
 
+const LeafletMap = dynamic(() => import("@/components/tracking/LeafletMap"), {
+  ssr: false,
+  loading: () => (
+    <div className="h-56 bg-gradient-to-br from-[#EBF4FF] to-[#F0F7FF] flex items-center justify-center">
+      <div className="flex items-center gap-2 text-[#64748B] text-sm">
+        <div className="w-4 h-4 border-2 border-[#FFB800] border-t-transparent rounded-full animate-spin" />
+        Loading map…
+      </div>
+    </div>
+  ),
+});
 
+const CITY_COORDS = {
+  lagos: [6.5244, 3.3792],
+  ikeja: [6.6018, 3.3515],
+  "new york": [40.7128, -74.0060],
+  "new york city": [40.7128, -74.0060],
+  nyc: [40.7128, -74.0060],
+  "los angeles": [34.0522, -118.2437],
+  la: [34.0522, -118.2437],
+  chicago: [41.8781, -87.6298],
+  houston: [29.7604, -95.3698],
+  miami: [25.7617, -80.1918],
+  toronto: [43.6532, -79.3832],
+  montreal: [45.5017, -73.5673],
+  london: [51.5074, -0.1278],
+  paris: [48.8566, 2.3522],
+  amsterdam: [52.3676, 4.9041],
+  dubai: [25.2048, 55.2708],
+  singapore: [1.3521, 103.8198],
+  frankfurt: [50.1109, 8.6821],
+  shanghai: [31.2304, 121.4737],
+  "hong kong": [22.3193, 114.1694],
+  tokyo: [35.6762, 139.6503],
+  sydney: [-33.8688, 151.2093],
+  mumbai: [19.0760, 72.8777],
+  delhi: [28.7041, 77.1025],
+  beijing: [39.9042, 116.4074],
+  berlin: [52.5200, 13.4050],
+  rome: [41.9028, 12.4964],
+  madrid: [40.4168, -3.7038],
+  "mexico city": [19.4326, -99.1332],
+  mexico: [19.4326, -99.1332],
+  seoul: [37.5665, 126.9780],
+  jakarta: [-6.2088, 106.8456],
+  "buenos aires": [-34.6037, -58.3816],
+  "sao paulo": [-23.5505, -46.6333],
+  rio: [-22.9068, -43.1729],
+};
 
+const COUNTRY_COORDS = {
+  nigeria: [9.0820, 8.6753],
+  "united states": [39.8283, -98.5795],
+  usa: [39.8283, -98.5795],
+  us: [39.8283, -98.5795],
+  "united kingdom": [55.3781, -3.4360],
+  uk: [55.3781, -3.4360],
+  germany: [51.1657, 10.4515],
+  france: [46.2276, 2.2137],
+  china: [35.8617, 104.1954],
+  india: [20.5937, 78.9629],
+  australia: [-25.2744, 133.7751],
+  canada: [56.1304, -106.3468],
+};
 
+function parseLatLng(locationString) {
+  if (!locationString || typeof locationString !== "string") return null;
+  const match = locationString.match(/(-?\d+(?:\.\d+)?)[,\s]+(-?\d+(?:\.\d+)?)/);
+  if (!match) return null;
+  const lat = parseFloat(match[1]);
+  const lng = parseFloat(match[2]);
+  if (Number.isFinite(lat) && Number.isFinite(lng)) {
+    return [lat, lng];
+  }
+  return null;
+}
 
+function getCityCoords(locationString) {
+  if (!locationString) return null;
+  const normalized = locationString.toString().trim().toLowerCase();
+  const explicit = parseLatLng(normalized);
+  if (explicit) return explicit;
 
+  for (const [city, coords] of Object.entries(CITY_COORDS)) {
+    if (normalized.includes(city)) return coords;
+  }
+
+  for (const [country, coords] of Object.entries(COUNTRY_COORDS)) {
+    if (normalized.includes(country)) return coords;
+  }
+
+  return null;
+}
+
+function resolveCoords(location) {
+  if (!location) return null;
+  if (Array.isArray(location) && location.length === 2) {
+    const [lat, lng] = location;
+    if (typeof lat === "number" && typeof lng === "number") return [lat, lng];
+  }
+
+  if (typeof location === "object") {
+    const lat = location.latitude ?? location.lat ?? location.latitud ?? location.lat;
+    const lng = location.longitude ?? location.lng ?? location.long ?? location.lon ?? location.lng;
+    if (typeof lat === "number" && typeof lng === "number") {
+      return [lat, lng];
+    }
+
+    const parts = [location.city, location.state, location.region, location.country]
+      .filter(Boolean)
+      .join(", ");
+    const addressCoords = getCityCoords(parts);
+    if (addressCoords) return addressCoords;
+  }
+
+  if (typeof location === "string") {
+    return getCityCoords(location);
+  }
+
+  return null;
+}
 
 const STEPS = [
   { key: "PICKED_UP",           label: "Picked Up",           icon: Package },
@@ -372,6 +488,10 @@ export default function TrackingPage({ params }) {
   const carrierText = shipment?.carrier || "Yellowduck Logistics";
   const progressValue = shipment?.progress != null ? shipment.progress : getProgressPercent(shipment?.currentStatus);
   const weightText = shipment?.package?.weightKg ? `${shipment.package.weightKg} kg` : "TBD";
+  const currentLocText = shipment?.currentLocation || timelineEvents[0]?.location || originText;
+  const originCoords = resolveCoords(shipment?.sender?.address) || getCityCoords(originText);
+  const destCoords = resolveCoords(shipment?.recipient?.address) || getCityCoords(destinationText);
+  const currentCoords = resolveCoords(shipment?.currentLocation) || resolveCoords(timelineEvents[0]?.location) || originCoords;
   const dimensionsText = shipment?.package?.dimensions
     ? `${shipment.package.dimensions.lengthCm} × ${shipment.package.dimensions.widthCm} × ${shipment.package.dimensions.heightCm} cm`
     : "TBD";
@@ -529,50 +649,62 @@ export default function TrackingPage({ params }) {
               </div>
             )}
 
-            {/* Map placeholder */}
+            {/* Map */}
             <div className="bg-white rounded-2xl border border-[#E2E8F0] overflow-hidden shadow-sm">
-              <div
-                className="relative h-48 sm:h-56 bg-gradient-to-br from-[#EBF4FF] to-[#F0F7FF] flex items-center justify-center"
-                style={{
-                  backgroundImage: `
-                    radial-gradient(circle at 25% 50%, rgba(255,184,0,0.12) 0%, transparent 40%),
-                    radial-gradient(circle at 75% 50%, rgba(59,130,246,0.08) 0%, transparent 40%)
-                  `,
-                }}
-              >
-                {/* Decorative route line */}
-                <svg className="absolute inset-0 w-full h-full" viewBox="0 0 600 220" fill="none" preserveAspectRatio="none">
-                  <path
-                    d="M 80 140 Q 200 30 520 100"
-                    stroke="#FFB800"
-                    strokeWidth="2"
-                    strokeDasharray="6 4"
-                    fill="none"
-                    opacity="0.6"
-                  />
-                  {/* Origin dot */}
-                  <circle cx="80" cy="140" r="6" fill="#FFB800" />
-                  <circle cx="80" cy="140" r="10" fill="#FFB800" fillOpacity="0.2" />
-                  {/* Current position */}
-                  <circle cx="310" cy="68" r="8" fill="#0F172A" />
-                  <circle cx="310" cy="68" r="14" fill="#0F172A" fillOpacity="0.15" />
-                  {/* Destination dot */}
-                  <circle cx="520" cy="100" r="6" fill="#64748B" opacity="0.4" />
-                </svg>
+              {originCoords && destCoords ? (
+                <LeafletMap
+                  origin={originCoords}
+                  destination={destCoords}
+                  current={currentCoords}
+                  originLabel={originText}
+                  destinationLabel={destinationText}
+                  currentLabel={currentLocText}
+                  status={shipment?.currentStatus}
+                />
+              ) : (
+                <div
+                  className="relative h-48 sm:h-56 bg-gradient-to-br from-[#EBF4FF] to-[#F0F7FF] flex items-center justify-center"
+                  style={{
+                    backgroundImage: `
+                      radial-gradient(circle at 25% 50%, rgba(255,184,0,0.12) 0%, transparent 40%),
+                      radial-gradient(circle at 75% 50%, rgba(59,130,246,0.08) 0%, transparent 40%)
+                    `,
+                  }}
+                >
+                  {/* Decorative route line */}
+                  <svg className="absolute inset-0 w-full h-full" viewBox="0 0 600 220" fill="none" preserveAspectRatio="none">
+                    <path
+                      d="M 80 140 Q 200 30 520 100"
+                      stroke="#FFB800"
+                      strokeWidth="2"
+                      strokeDasharray="6 4"
+                      fill="none"
+                      opacity="0.6"
+                    />
+                    {/* Origin dot */}
+                    <circle cx="80" cy="140" r="6" fill="#FFB800" />
+                    <circle cx="80" cy="140" r="10" fill="#FFB800" fillOpacity="0.2" />
+                    {/* Current position */}
+                    <circle cx="310" cy="68" r="8" fill="#0F172A" />
+                    <circle cx="310" cy="68" r="14" fill="#0F172A" fillOpacity="0.15" />
+                    {/* Destination dot */}
+                    <circle cx="520" cy="100" r="6" fill="#64748B" opacity="0.4" />
+                  </svg>
 
-                {/* Labels */}
-                <div className="absolute left-8 bottom-8 text-xs font-semibold text-[#0F172A]">{originText}</div>
-                <div className="absolute right-8 bottom-10 text-xs font-semibold text-[#94A3B8]">{destinationText}</div>
-                <div className="absolute top-4 left-1/2 -translate-x-1/2 flex items-center gap-2 bg-[#0F172A]/80 text-white px-3 py-1.5 rounded-full text-xs font-medium backdrop-blur-sm">
-                  <Plane size={12} className="text-[#FFB800]" />
-                  {carrierText} · In transit
-                </div>
+                  {/* Labels */}
+                  <div className="absolute left-8 bottom-8 text-xs font-semibold text-[#0F172A]">{originText}</div>
+                  <div className="absolute right-8 bottom-10 text-xs font-semibold text-[#94A3B8]">{destinationText}</div>
+                  <div className="absolute top-4 left-1/2 -translate-x-1/2 flex items-center gap-2 bg-[#0F172A]/80 text-white px-3 py-1.5 rounded-full text-xs font-medium backdrop-blur-sm">
+                    <Plane size={12} className="text-[#FFB800]" />
+                    {carrierText} · In transit
+                  </div>
 
-                {/* Map coming soon badge */}
-                <div className="absolute bottom-4 right-4 text-[10px] text-[#CBD5E1] bg-white/70 border border-[#E2E8F0] px-2 py-1 rounded-full">
-                  Live map · Coming soon
+                  {/* Map fallback badge */}
+                  <div className="absolute bottom-4 right-4 text-[10px] text-[#CBD5E1] bg-white/70 border border-[#E2E8F0] px-2 py-1 rounded-full">
+                    Map data unavailable
+                  </div>
                 </div>
-              </div>
+              )}
             </div>
 
             {/* Live Timeline */}

@@ -1,8 +1,12 @@
 "use client";
 
+import { useEffect, useMemo, useState } from "react";
 import Sidebar from "@/components/nav/Sidebar";
 import Topbar from "@/app/dashboard/components/Navbar";
 import Link from "next/link";
+import { onAuthStateChanged } from "firebase/auth";
+import { auth } from "@/lib/firebase/client";
+import { getUserShipments } from "@/services/shipment.service";
 import {
   Package,
   TrendingUp,
@@ -21,83 +25,11 @@ import {
   ChevronRight,
 } from "lucide-react";
 
-// ─── Mock Data ─────────────────────────────────────────────────────────────────
-const METRICS = [
-  {
-    label: "Total Shipments",
-    value: "182",
-    delta: "+12%",
-    up: true,
-    icon: Package,
-    color: "bg-blue-50 text-blue-600",
-  },
-  {
-    label: "In Transit",
-    value: "24",
-    delta: "+3 today",
-    up: true,
-    icon: Plane,
-    color: "bg-amber-50 text-amber-600",
-  },
-  {
-    label: "Delivered (30d)",
-    value: "153",
-    delta: "99.3% on-time",
-    up: true,
-    icon: CheckCircle2,
-    color: "bg-green-50 text-green-600",
-  },
-  {
-    label: "Exceptions",
-    value: "5",
-    delta: "-2 vs last wk",
-    up: true,
-    icon: AlertTriangle,
-    color: "bg-red-50 text-red-600",
-  },
-];
-
-const RECENT_SHIPMENTS = [
-  {
-    id: "YDK-INTL-000182",
-    route: "Lagos → New York",
-    status: "IN_TRANSIT",
-    eta: "Jun 2",
-    weight: "3.4 kg",
-    service: "Express",
-  },
-  {
-    id: "YDK-INTL-000181",
-    route: "London → Dubai",
-    status: "CUSTOMS_HOLD",
-    eta: "Jun 1",
-    weight: "1.2 kg",
-    service: "Standard",
-  },
-  {
-    id: "YDK-INTL-000180",
-    route: "Toronto → Lagos",
-    status: "DELIVERED",
-    eta: "May 28",
-    weight: "6.0 kg",
-    service: "Economy",
-  },
-  {
-    id: "YDK-INTL-000179",
-    route: "New York → London",
-    status: "OUT_FOR_DELIVERY",
-    eta: "May 23",
-    weight: "2.1 kg",
-    service: "Express",
-  },
-  {
-    id: "YDK-INTL-000178",
-    route: "Dubai → Singapore",
-    status: "DELIVERED",
-    eta: "May 22",
-    weight: "0.8 kg",
-    service: "Express",
-  },
+const QUICK_ACTIONS = [
+  { label: "New Shipment",    href: "/dashboard/create",    icon: Plus,       accent: true },
+  { label: "Track Package",   href: "/dashboard/tracking",  icon: MapPin,     accent: false },
+  { label: "View Invoices",   href: "/dashboard/invoices",  icon: BarChart3,  accent: false },
+  { label: "Customs Docs",    href: "/dashboard/shipments", icon: Shield,     accent: false },
 ];
 
 const ACTIVITY = [
@@ -109,12 +41,101 @@ const ACTIVITY = [
   { id: 6, msg: "YDK-INTL-000178 delivered successfully",    time: "May 22",     icon: CheckCircle2, type: "success" },
 ];
 
-const QUICK_ACTIONS = [
-  { label: "New Shipment",    href: "/dashboard/create",    icon: Plus,       accent: true },
-  { label: "Track Package",   href: "/dashboard/tracking",  icon: MapPin,     accent: false },
-  { label: "View Invoices",   href: "/dashboard/invoices",  icon: BarChart3,  accent: false },
-  { label: "Customs Docs",    href: "/dashboard/shipments", icon: Shield,     accent: false },
-];
+function formatDate(timestamp) {
+  if (!timestamp) {
+    return "—";
+  }
+
+  if (typeof timestamp.toDate === "function") {
+    return timestamp.toDate().toLocaleDateString("en-US", {
+      month: "short",
+      day: "numeric",
+    });
+  }
+
+  const date = new Date(timestamp);
+  if (Number.isNaN(date.getTime())) {
+    return String(timestamp);
+  }
+
+  return date.toLocaleDateString("en-US", {
+    month: "short",
+    day: "numeric",
+  });
+}
+
+function getShipmentRoute(shipment) {
+  const origin = shipment.sender?.address?.city || shipment.sender?.address?.country || "Unknown";
+  const destination = shipment.recipient?.address?.city || shipment.recipient?.address?.country || "Unknown";
+  return `${origin} → ${destination}`;
+}
+
+function getShipmentWeight(shipment) {
+  if (shipment.package?.weightKg) {
+    return `${shipment.package.weightKg} kg`;
+  }
+  if (shipment.weightKg) {
+    return `${shipment.weightKg} kg`;
+  }
+  return "—";
+}
+
+function getShipmentService(shipment) {
+  return shipment.pricing?.serviceCode || shipment.service || "Standard";
+}
+
+function buildMetrics(shipments, loading) {
+  const total = shipments.length;
+  const inTransit = shipments.filter((shipment) => shipment.currentStatus === "IN_TRANSIT").length;
+  const delivered = shipments.filter((shipment) => shipment.currentStatus === "DELIVERED").length;
+  const exceptions = shipments.filter((shipment) => shipment.currentStatus === "EXCEPTION").length;
+
+  return [
+    {
+      label: "Total Shipments",
+      value: loading ? "…" : String(total),
+      delta: loading ? "Loading" : `${total} in view`,
+      up: true,
+      icon: Package,
+      color: "bg-blue-50 text-blue-600",
+    },
+    {
+      label: "In Transit",
+      value: loading ? "…" : String(inTransit),
+      delta: loading ? "Loading" : `${inTransit} active`,
+      up: true,
+      icon: Plane,
+      color: "bg-amber-50 text-amber-600",
+    },
+    {
+      label: "Delivered",
+      value: loading ? "…" : String(delivered),
+      delta: loading ? "Loading" : `${delivered} delivered`,
+      up: true,
+      icon: CheckCircle2,
+      color: "bg-green-50 text-green-600",
+    },
+    {
+      label: "Exceptions",
+      value: loading ? "…" : String(exceptions),
+      delta: loading ? "Loading" : `${exceptions} open`,
+      up: exceptions === 0,
+      icon: AlertTriangle,
+      color: "bg-red-50 text-red-600",
+    },
+  ];
+}
+
+function mapRecentShipments(shipments) {
+  return shipments.slice(0, 5).map((shipment) => ({
+    id: shipment.trackingNumber || shipment.id,
+    route: getShipmentRoute(shipment),
+    status: shipment.currentStatus,
+    eta: shipment.estimatedDelivery || shipment.eta || "—",
+    weight: getShipmentWeight(shipment),
+    service: getShipmentService(shipment),
+  }));
+}
 
 // ─── Status Config ─────────────────────────────────────────────────────────────
 const STATUS_STYLE = {
@@ -157,6 +178,79 @@ function Sparkline({ values = [40, 70, 55, 80, 65, 90, 75] }) {
 
 // ─── Page ─────────────────────────────────────────────────────────────────────
 export default function DashboardPage() {
+  const [user, setUser] = useState(null);
+  const [initialized, setInitialized] = useState(false);
+  const [shipments, setShipments] = useState([]);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState("");
+
+  useEffect(() => {
+    const unsubscribe = onAuthStateChanged(auth, (nextUser) => {
+      setUser(nextUser);
+      setInitialized(true);
+    });
+
+    return () => unsubscribe();
+  }, []);
+
+  useEffect(() => {
+    if (!user) {
+      return;
+    }
+
+    loadShipments();
+  }, [user]);
+
+  async function loadShipments() {
+    if (!user) {
+      return;
+    }
+
+    setLoading(true);
+    setError("");
+
+    try {
+      const response = await getUserShipments({
+        userId: user.uid,
+        userEmail: user.email,
+        pageSize: 10,
+      });
+
+      setShipments(response.shipments);
+    } catch (err) {
+      console.error("[DashboardPage]", err);
+      setError(err?.message || "Unable to load dashboard shipments.");
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  const metrics = useMemo(() => buildMetrics(shipments, loading), [shipments, loading]);
+  const recentShipments = useMemo(() => mapRecentShipments(shipments), [shipments]);
+
+  const activeCount = shipments.filter((shipment) => shipment.currentStatus !== "DELIVERED").length;
+  const countries = new Set(
+    shipments
+      .map((shipment) => shipment.recipient?.address?.country || shipment.sender?.address?.country)
+      .filter(Boolean)
+  ).size;
+  const subtitleText = loading
+    ? "Loading your shipments from Firestore."
+    : shipments.length === 0
+    ? "No shipments found for your account."
+    : `You have ${activeCount} active shipments${countries ? ` across ${countries} countries` : ""}.`;
+
+  if (!initialized) {
+    return (
+      <div className="flex min-h-screen items-center justify-center bg-[#F8FAFC] px-4">
+        <div className="inline-flex items-center gap-3 rounded-3xl border border-[#E2E8F0] bg-white px-6 py-5 text-sm text-slate-600 shadow-sm">
+          <Clock className="h-5 w-5 animate-spin" />
+          Loading your dashboard...
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="flex h-screen bg-[#F8FAFC] overflow-hidden">
       <Sidebar />
@@ -169,8 +263,8 @@ export default function DashboardPage() {
           {/* ── Welcome + Quick Actions ──────────────────────────── */}
           <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
             <div>
-              <h2 className="text-xl font-extrabold text-[#0F172A]">Good morning, Jane 👋</h2>
-              <p className="text-sm text-[#64748B] mt-0.5">You have 24 active shipments across 11 countries.</p>
+              <h2 className="text-xl font-extrabold text-[#0F172A]">Good morning{user ? ", " + (user.displayName || "there") : ""} 👋</h2>
+              <p className="text-sm text-[#64748B] mt-0.5">{subtitleText}</p>
             </div>
             <div className="flex flex-wrap gap-2">
               {QUICK_ACTIONS.map((action) => {
@@ -196,9 +290,15 @@ export default function DashboardPage() {
             </div>
           </div>
 
+          {error ? (
+            <div className="rounded-2xl border border-red-100 bg-red-50 px-4 py-3 text-sm text-red-700">
+              {error}
+            </div>
+          ) : null}
+
           {/* ── Metrics Cards ────────────────────────────────────── */}
           <div className="grid grid-cols-2 xl:grid-cols-4 gap-4">
-            {METRICS.map((m) => {
+            {metrics.map((m) => {
               const Icon = m.icon;
               return (
                 <div key={m.label} className="bg-white rounded-2xl border border-[#E2E8F0] p-5 shadow-sm">
@@ -238,36 +338,42 @@ export default function DashboardPage() {
               </div>
 
               <div className="divide-y divide-[#F8FAFC]">
-                {RECENT_SHIPMENTS.map((ship) => (
-                  <Link
-                    key={ship.id}
-                    href={`/track/${ship.id}`}
-                    className="flex items-center gap-4 px-6 py-4 hover:bg-[#F8FAFC] transition-colors group"
-                  >
-                    <div className="w-9 h-9 rounded-xl bg-[#F8FAFC] border border-[#E2E8F0] flex items-center justify-center flex-shrink-0">
-                      <Package size={15} className="text-[#94A3B8]" />
-                    </div>
+                {recentShipments.length > 0 ? (
+                  recentShipments.map((ship) => (
+                    <Link
+                      key={ship.id}
+                      href={`/track/${ship.id}`}
+                      className="flex items-center gap-4 px-6 py-4 hover:bg-[#F8FAFC] transition-colors group"
+                    >
+<div className="w-9 h-9 rounded-xl bg-[#F8FAFC] border border-[#E2E8F0] flex items-center justify-center shrink-0">
+                        <Package size={15} className="text-[#94A3B8]" />
+                      </div>
 
-                    <div className="flex-1 min-w-0">
-                      <p className="text-sm font-semibold text-[#0F172A] truncate group-hover:text-[#FFB800] transition-colors">
-                        {ship.id}
-                      </p>
-                      <p className="text-xs text-[#64748B] mt-0.5 flex items-center gap-1">
-                        <MapPin size={9} />
-                        {ship.route}
-                      </p>
-                    </div>
+                      <div className="flex-1 min-w-0">
+                        <p className="text-sm font-semibold text-[#0F172A] truncate group-hover:text-[#FFB800] transition-colors">
+                          {ship.id}
+                        </p>
+                        <p className="text-xs text-[#64748B] mt-0.5 flex items-center gap-1">
+                          <MapPin size={9} />
+                          {ship.route}
+                        </p>
+                      </div>
 
-                    <div className="hidden sm:flex flex-col items-end gap-1">
-                      <span className={`text-[11px] font-semibold px-2 py-0.5 rounded-full ${STATUS_STYLE[ship.status]}`}>
-                        {STATUS_LABEL[ship.status]}
-                      </span>
-                      <span className="text-[10px] text-[#94A3B8]">ETA {ship.eta} · {ship.weight}</span>
-                    </div>
+                      <div className="hidden sm:flex flex-col items-end gap-1">
+                        <span className={`text-[11px] font-semibold px-2 py-0.5 rounded-full ${STATUS_STYLE[ship.status]}`}>
+                          {STATUS_LABEL[ship.status] || ship.status || "Unknown"}
+                        </span>
+                        <span className="text-[10px] text-[#94A3B8]">ETA {formatDate(ship.eta)} · {ship.weight}</span>
+                      </div>
 
-                    <ChevronRight size={15} className="text-[#E2E8F0] group-hover:text-[#94A3B8] transition-colors flex-shrink-0" />
-                  </Link>
-                ))}
+                      <ChevronRight size={15} className="text-[#E2E8F0] group-hover:text-[#94A3B8] transition-colors shrink-0" />
+                    </Link>
+                  ))
+                ) : (
+                  <div className="px-6 py-8 text-sm text-[#64748B]">
+                    {loading ? "Loading recent shipments…" : "No recent shipments available for your account."}
+                  </div>
+                )}
               </div>
             </div>
 
@@ -304,7 +410,7 @@ export default function DashboardPage() {
                     const Icon = item.icon;
                     return (
                       <li key={item.id} className="flex items-start gap-3 px-5 py-3.5">
-                        <div className={`w-7 h-7 rounded-lg flex items-center justify-center flex-shrink-0 mt-0.5 ${ACTIVITY_STYLE[item.type]}`}>
+                        <div className={`w-7 h-7 rounded-lg flex items-center justify-center shrink-0 mt-0.5 ${ACTIVITY_STYLE[item.type]}`}>
                           <Icon size={13} />
                         </div>
                         <div className="flex-1 min-w-0">

@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, use } from "react";
 import Link from "next/link";
 import { onAuthStateChanged } from "firebase/auth";
 import Sidebar from "@/components/nav/Sidebar";
@@ -53,7 +53,8 @@ function formatDate(timestamp) {
   });
 }
 
-export default function ShipmentDetailPage({ params }) {
+export default function ShipmentDetailPage(props) {
+  const params = use(props.params);
   const shipmentId = params?.id;
   const [user, setUser] = useState(null);
   const [initialized, setInitialized] = useState(false);

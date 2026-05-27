@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, use } from "react";
 import Sidebar from "@/components/nav/Sidebar";
 import Topbar from "@/app/dashboard/components/Navbar";
 import Link from "next/link";
@@ -109,7 +109,8 @@ const TIMELINE_STYLE = {
 };
 
 // ─── Page ─────────────────────────────────────────────────────────────────────
-export default function AdminShipmentDetailPage({ params }) {
+export default function AdminShipmentDetailPage(props) {
+  const params = use(props.params);
   const shipId = params?.id ?? "YDK-INTL-000182";
   const [newEventLabel, setNewEventLabel] = useState("");
   const [newEventLocation, setNewEventLocation] = useState("");
@@ -120,7 +121,6 @@ export default function AdminShipmentDetailPage({ params }) {
   return (
     <div className="flex h-screen bg-[#F8FAFC] overflow-hidden">
       <Sidebar isAdmin />
-
       <div className="flex-1 flex flex-col min-w-0 overflow-hidden">
         <Topbar title={shipId} subtitle="Admin shipment detail" />
 

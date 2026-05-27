@@ -13,7 +13,7 @@ function isAuthRoute(pathname) {
   return AUTH_ROUTES.some((route) => pathname === route || pathname.startsWith(`${route}/`));
 }
 
-export function middleware(request) {
+export function proxy(request) {
   const { nextUrl, cookies } = request;
   const { pathname } = nextUrl;
 

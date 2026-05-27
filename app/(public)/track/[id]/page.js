@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, use } from "react";
 import Link from "next/link";
 import dynamic from "next/dynamic";
 import Navbar from "@/components/nav/Navbar";
@@ -375,11 +375,12 @@ function DetailRow({ icon: Icon, label, value }) {
 }
 
 // ─── Main Page ────────────────────────────────────────────────────────────────
-export default function TrackingPage({ params }) {
+export default function TrackingPage(props) {
+  const params = use(props.params);
   const trackingId = params?.id || "";
   const [copied, setCopied] = useState(false);
   const [showAll, setShowAll] = useState(false);
-  
+
 
 
 

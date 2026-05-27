@@ -25,7 +25,6 @@ import {
   ChevronRight,
 } from "@/components/icons/CustomIcons";
 
-// ─── Public Navigation ────────────────────────────────────────────────────────
 export const PUBLIC_NAV_LINKS = [
   { label: "Solutions", href: "/solutions" },
   { label: "Pricing", href: "/pricing" },
@@ -44,7 +43,6 @@ export const PUBLIC_NAV_AUTH = {
   signup: { label: "Get Started", href: "/auth/register" },
 };
 
-// ─── Dashboard Sidebar Navigation ────────────────────────────────────────────
 export const SIDEBAR_MAIN_LINKS = [
   {
     label: "Overview",
@@ -56,7 +54,7 @@ export const SIDEBAR_MAIN_LINKS = [
     label: "Shipments",
     href: "/dashboard/shipments",
     icon: Package,
-    badge: "12",
+    badge: null,
   },
   {
     label: "Create Shipment",
@@ -74,7 +72,7 @@ export const SIDEBAR_MAIN_LINKS = [
     label: "Invoices",
     href: "/dashboard/invoices",
     icon: FileText,
-    badge: "3",
+    badge: null,
   },
   {
     label: "Analytics",
@@ -95,7 +93,7 @@ export const SIDEBAR_SECONDARY_LINKS = [
     label: "Notifications",
     href: "/dashboard/notifications",
     icon: Bell,
-    badge: "5",
+    badge: null,
   },
   {
     label: "Team",

@@ -1,9 +1,13 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import Logo from "../Logo";
+import { onAuthStateChanged } from "firebase/auth";
+import { doc, getDoc } from "firebase/firestore";
+import { auth, db } from "@/lib/firebase/client";
+import { getUserShipmentCount } from "@/services/shipment.service";
 import {
   SIDEBAR_MAIN_LINKS,
   SIDEBAR_SECONDARY_LINKS,
@@ -42,7 +46,7 @@ function NavItem({ link, collapsed, pathname, onClick }) {
       >
         <Icon
           size={18}
-          className={`flex-shrink-0 transition-colors ${
+          className={`shrink-0 transition-colors ${
             isActive ? "text-[#0F172A]" : "text-[#64748B] group-hover:text-white"
           }`}
         />
@@ -56,7 +60,7 @@ function NavItem({ link, collapsed, pathname, onClick }) {
         {!collapsed && link.badge && (
           <span
             className={`
-              text-[10px] font-bold px-1.5 py-0.5 rounded-full min-w-[18px] text-center leading-none
+              text-[10px] font-bold px-1.5 py-0.5 rounded-full min-w-4.5 text-center leading-none
               ${isActive
                 ? "bg-[#0F172A]/15 text-[#0F172A]"
                 : "bg-[#FFB800]/20 text-[#FFB800]"
@@ -91,11 +95,87 @@ export default function Sidebar({ isAdmin = false }) {
   const pathname = usePathname();
   const [collapsed, setCollapsed] = useState(false);
   const [mobileOpen, setMobileOpen] = useState(false);
+  const [user, setUser] = useState(null);
+  const [profile, setProfile] = useState(null);
+  const [shipmentCount, setShipmentCount] = useState(null);
 
   // Close mobile menu on route change
   useEffect(() => {
     setMobileOpen(false);
   }, [pathname]);
+
+  useEffect(() => {
+    const unsubscribe = onAuthStateChanged(auth, (nextUser) => {
+      setUser(nextUser);
+    });
+
+    return () => unsubscribe();
+  }, []);
+
+  useEffect(() => {
+    if (!user?.uid) {
+      setProfile(null);
+      return;
+    }
+
+    async function loadProfile() {
+      try {
+        const profileRef = doc(db, "users", user.uid);
+        const snap = await getDoc(profileRef);
+        setProfile(snap.exists() ? { id: snap.id, ...snap.data() } : null);
+      } catch (err) {
+        console.error("[Sidebar] loadProfile", err);
+        setProfile(null);
+      }
+    }
+
+    loadProfile();
+  }, [user]);
+
+  useEffect(() => {
+    if (!user) {
+      setShipmentCount(null);
+      return;
+    }
+
+    async function loadShipmentCount() {
+      try {
+        const count = await getUserShipmentCount({
+          userId: user.uid,
+          userEmail: user.email,
+        });
+        setShipmentCount(count);
+      } catch (err) {
+        console.error("[Sidebar] loadShipmentCount", err);
+        setShipmentCount(null);
+      }
+    }
+
+    loadShipmentCount();
+  }, [user]);
+
+  const mainLinks = useMemo(
+    () => SIDEBAR_MAIN_LINKS.map((link) => {
+      if (link.href === "/dashboard/shipments") {
+        return {
+          ...link,
+          badge: shipmentCount !== null ? String(shipmentCount) : null,
+        };
+      }
+      return link;
+    }),
+    [shipmentCount]
+  );
+
+  const userName = profile?.displayName || user?.displayName || "Guest";
+  const userEmail = profile?.email || user?.email || "No email";
+  const userInitials = userName
+    .split(" ")
+    .filter(Boolean)
+    .map((part) => part[0])
+    .join("")
+    .slice(0, 2)
+    .toUpperCase();
 
   // Lock body scroll when mobile drawer is open
   useEffect(() => {
@@ -107,14 +187,14 @@ export default function Sidebar({ isAdmin = false }) {
     <aside
       className={`
         flex flex-col h-full bg-[#0F172A]
-        ${!isMobile ? (collapsed ? "w-[68px]" : "w-[240px]") : "w-[280px]"}
+        ${!isMobile ? (collapsed ? "w-17" : "w-60") : "w-70"}
         transition-[width] duration-200 ease-in-out
       `}
     >
       {/* ── Logo / Header ─────────────────────────────────────── */}
       <div
         className={`
-          flex items-center h-16 border-b border-[#1E293B] flex-shrink-0
+          flex items-center h-16 border-b border-[#1E293B] shrink-0
           ${collapsed && !isMobile ? "justify-center px-0" : "px-4"}
         `}
       >
@@ -142,7 +222,7 @@ export default function Sidebar({ isAdmin = false }) {
         {/* Main nav */}
         <SectionLabel label="Main" collapsed={collapsed && !isMobile} />
         <ul className="space-y-0.5">
-          {SIDEBAR_MAIN_LINKS.map((link) => (
+          {mainLinks.map((link) => (
             <NavItem
               key={link.href}
               link={link}
@@ -184,21 +264,21 @@ export default function Sidebar({ isAdmin = false }) {
       </nav>
 
       {/* ── Footer / Collapse Toggle ──────────────────────────── */}
-      <div className="flex-shrink-0 border-t border-[#1E293B] p-2 space-y-1">
+      <div className="shrink-0 border-t border-[#1E293B] p-2 space-y-1">
 
         {/* User snippet */}
         {!(collapsed && !isMobile) && (
           <div className="flex items-center gap-3 px-3 py-2 rounded-xl hover:bg-[#1E293B] transition-colors cursor-pointer group">
-            <div className="w-8 h-8 rounded-full bg-[#FFB800] flex items-center justify-center text-[#0F172A] font-bold text-xs flex-shrink-0">
-              JD
+            <div className="w-8 h-8 rounded-full bg-[#FFB800] flex items-center justify-center text-[#0F172A] font-bold text-xs shrink-0">
+              {userInitials || "JD"}
             </div>
             <div className="flex-1 min-w-0">
-              <p className="text-xs font-semibold text-white truncate">Jane Doe</p>
-              <p className="text-[10px] text-[#64748B] truncate">jane@acme.com</p>
+              <p className="text-xs font-semibold text-white truncate">{userName}</p>
+              <p className="text-[10px] text-[#64748B] truncate">{userEmail}</p>
             </div>
             <LogOut
               size={14}
-              className="text-[#475569] group-hover:text-[#94A3B8] flex-shrink-0 transition-colors"
+              className="text-[#475569] group-hover:text-[#94A3B8] shrink-0 transition-colors"
             />
           </div>
         )}
@@ -236,7 +316,7 @@ export default function Sidebar({ isAdmin = false }) {
         className={`
           hidden lg:flex flex-col fixed top-0 left-0 bottom-0 z-30
           transition-[width] duration-200
-          ${collapsed ? "w-[68px]" : "w-[240px]"}
+          ${collapsed ? "w-17" : "w-60"}
         `}
       >
         {sidebarContent(false)}
@@ -245,8 +325,8 @@ export default function Sidebar({ isAdmin = false }) {
       {/* ── Desktop spacer so main content is not under sidebar ─────────── */}
       <div
         className={`
-          hidden lg:block flex-shrink-0 transition-[width] duration-200
-          ${collapsed ? "w-[68px]" : "w-[240px]"}
+          hidden lg:block shrink-0 transition-[width] duration-200
+          ${collapsed ? "w-17" : "w-60"}
         `}
         aria-hidden="true"
       />

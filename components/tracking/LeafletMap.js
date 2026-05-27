@@ -87,7 +87,21 @@ export default function LeafletMap({
 
         const originIcon = makeIcon("#FFB800", 28);
         const destIcon   = makeIcon("#0F172A", 28);
-        const curIcon    = makeIcon("#22C55E", 32);
+        const curIcon    = L.divIcon({
+          html: `
+            <div class="leaflet-current-marker" style="
+              width:32px;
+              height:32px;
+              border-radius:50%;
+              background:#22C55E;
+              border:3px solid white;
+              box-shadow:0 0 0 0 rgba(34,197,94,0.6);
+            "></div>
+          `,
+          iconSize: [32, 32],
+          iconAnchor: [16, 16],
+          className: "",
+        });
 
         // ── Markers ─────────────────────────────────────────────────────────
         const originMarker = L.marker(origin, { icon: originIcon }).addTo(map);

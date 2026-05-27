@@ -3,6 +3,7 @@
 import { useState, useEffect } from "react";
 import Link from "next/link";
 import dynamic from "next/dynamic";
+import Navbar from "@/components/nav/Navbar";
 import {
   Package,
   MapPin,
@@ -32,17 +33,10 @@ import {
 
 
 import {
-  doc,
-  collection,
-  onSnapshot,
-  query,
-  orderBy,
-  where,
-  limit,
-  getDocs,
-} from "firebase/firestore";
-
-import { db } from "@/lib/firebase/client";
+  getShipment,
+  getShipmentByTrackingNumber,
+  getShipmentEvents,
+} from "@/services/shipment.service";
 
 const LeafletMap = dynamic(() => import("@/components/tracking/LeafletMap"), {
   ssr: false,
@@ -395,53 +389,36 @@ export default function TrackingPage({ params }) {
   const [loading, setLoading] = useState(Boolean(trackingId));
   const [error, setError] = useState(trackingId ? null : "Tracking ID not provided.");
 
-  useEffect(() => {
-    if (!trackingId) {
-      return;
-    }
+  const loadShipment = async () => {
+    if (!trackingId) return;
 
-    const shipmentRef = doc(db, "shipments", trackingId);
+    setLoading(true);
+    setError(null);
 
-    const unsubscribe = onSnapshot(
-      shipmentRef,
-      async (snapshot) => {
-        if (snapshot.exists()) {
-          setShipment({ id: snapshot.id, ...snapshot.data() });
-          setLoading(false);
-          return;
-        }
-
-        try {
-          const fallbackQuery = query(
-            collection(db, "shipments"),
-            where("trackingNumber", "==", trackingId),
-            limit(1)
-          );
-          const fallbackSnapshot = await getDocs(fallbackQuery);
-
-          if (!fallbackSnapshot.empty) {
-            const docSnap = fallbackSnapshot.docs[0];
-            setShipment({ id: docSnap.id, ...docSnap.data() });
-            setLoading(false);
-            return;
-          }
-
-          setError("Tracking ID not found.");
-          setLoading(false);
-        } catch (err) {
-          console.error(err);
-          setError("Failed to load shipment.");
-          setLoading(false);
-        }
-      },
-      (err) => {
-        console.error(err);
-        setError("Failed to load shipment.");
-        setLoading(false);
+    try {
+      const data = await getShipment(trackingId);
+      if (data) {
+        setShipment(data);
+        return;
       }
-    );
 
-    return () => unsubscribe();
+      const fallbackData = await getShipmentByTrackingNumber(trackingId);
+      if (fallbackData) {
+        setShipment(fallbackData);
+        return;
+      }
+
+      setError("Tracking ID not found.");
+    } catch (err) {
+      console.error(err);
+      setError("Failed to load shipment.");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    loadShipment();
   }, [trackingId]);
 
 
@@ -450,21 +427,16 @@ export default function TrackingPage({ params }) {
       return;
     }
 
-    const eventsRef = collection(db, "shipments", shipment.id, "events");
-    const q = query(eventsRef, orderBy("timestamp", "desc"));
+    async function loadEvents() {
+      try {
+        const eventData = await getShipmentEvents(shipment.id, { order: "desc" });
+        setEvents(eventData);
+      } catch (err) {
+        console.error(err);
+      }
+    }
 
-    const unsubEvents = onSnapshot(q, (snapshot) => {
-      const eventData = snapshot.docs.map((doc) => ({
-        id: doc.id,
-        ...doc.data(),
-      }));
-
-      setEvents(eventData);
-    }, (err) => {
-      console.error(err);
-    });
-
-    return () => unsubEvents();
+    loadEvents();
   }, [shipment?.id]);
 
   const timelineEvents = (shipment?.id ? events : []).map((event) => ({
@@ -542,7 +514,7 @@ export default function TrackingPage({ params }) {
 
   return (
     <div className="min-h-screen bg-[#F8FAFC]">
-      
+      <Navbar />
 
       <main className="max-w-5xl mx-auto px-4 sm:px-6 lg:px-8 pt-24 pb-16">
 
@@ -586,7 +558,11 @@ export default function TrackingPage({ params }) {
 
             <div className="flex flex-col items-start sm:items-end gap-2">
               <StatusBadge status={shipment?.currentStatus || "LABEL_CREATED"} pulse={(shipment?.currentStatus || "LABEL_CREATED") === "IN_TRANSIT"} />
-              <button className="inline-flex items-center gap-1.5 text-xs text-[#94A3B8] hover:text-[#64748B] transition-colors">
+              <button
+                type="button"
+                onClick={loadShipment}
+                className="inline-flex items-center gap-1.5 text-xs text-[#94A3B8] hover:text-[#64748B] transition-colors"
+              >
                 <RefreshCw size={11} />
                 Refresh status
               </button>

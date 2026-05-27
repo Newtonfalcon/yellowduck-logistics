@@ -3,18 +3,49 @@ rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
 
-    match /shipments/{shipmentId} {
+    function isAuthenticated() {
+      return request.auth != null;
+    }
 
+    function getUserProfile() {
+      return get(/databases/$(database)/documents/users/$(request.auth.uid)).data;
+    }
+
+    function isAuthorizedUser() {
+      return isAuthenticated() && getUserProfile().isAuthorized == true;
+    }
+
+    function isAdminUser() {
+      return isAuthenticated() && getUserProfile().isAdmin == true;
+    }
+
+    function isUserShipmentOwner() {
+      return isAuthenticated() && (
+        resource.data.customerId == request.auth.uid ||
+        resource.data.sender.email == request.auth.token.email
+      );
+    }
+
+    match /users/{userId} {
+      allow read: if request.auth != null && request.auth.uid == userId;
+      allow write: if request.auth != null && request.auth.uid == userId;
+    }
+
+    match /shipments/{shipmentId} {
       allow read: if true;
 
-      allow write:
-        if request.auth != null;
+      allow create: if isAdminUser() || (isAuthorizedUser() && (
+        request.resource.data.customerId == request.auth.uid ||
+        request.resource.data.sender.email == request.auth.token.email
+      ));
+
+      allow update, delete: if isAdminUser() || (isAuthorizedUser() && isUserShipmentOwner());
 
       match /events/{eventId} {
         allow read: if true;
 
-        allow write:
-          if request.auth != null;
+        allow create: if isAdminUser() || (isAuthorizedUser() && isUserShipmentOwner());
+        allow update, delete: if isAdminUser();
       }
     }
   }

@@ -21,6 +21,7 @@ import {
   doc,
   getDoc,
   getDocs,
+  getCountFromServer,
   updateDoc,
   query,
   where,
@@ -113,6 +114,27 @@ export async function getShipment(shipmentId) {
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
+// getShipmentByTrackingNumber
+// Finds a shipment using the trackingNumber field instead of the Firestore document ID.
+// This is useful for public tracking URLs that may use the tracking number.
+// Required Firestore index: shipments -> trackingNumber ASC
+// ─────────────────────────────────────────────────────────────────────────────
+export async function getShipmentByTrackingNumber(trackingNumber) {
+  if (!trackingNumber) return null;
+
+  const ref = collection(db, COLLECTION);
+  const q = query(ref, where("trackingNumber", "==", trackingNumber), limit(1));
+  const snap = await getDocs(q);
+
+  if (snap.empty) return null;
+  const docSnap = snap.docs[0];
+  return {
+    id: docSnap.id,
+    ...docSnap.data(),
+  };
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
 // getShipments
 // Returns a paginated, optionally filtered list of shipments.
 //
@@ -184,6 +206,10 @@ export async function getShipments({
 //
 // @param  {{ userId?, userEmail?, statusFilter?, pageSize?, lastDoc? }} opts
 // @returns {Promise<{ shipments: Object[], lastDoc: any, hasMore: boolean }>}
+//
+// Required Firestore indexes:
+//   - shipments: customerId ASC, currentStatus ASC, createdAt DESC
+//   - shipments: sender.email ASC, currentStatus ASC, createdAt DESC
 export async function getUserShipments({
   userId       = null,
   userEmail    = null,
@@ -198,41 +224,69 @@ export async function getUserShipments({
   const ref = collection(db, COLLECTION);
   const fieldName = userId ? "customerId" : "sender.email";
   const fieldValue = userId ? userId : userEmail;
-  const fetchLimit = statusFilter ? pageSize * 4 : pageSize + 1;
 
   if (!fieldValue) {
     throw new Error("getUserShipments requires a userId or userEmail");
   }
 
-  const snap = await getDocs(query(ref, where(fieldName, "==", fieldValue), limit(fetchLimit)));
-
-  let shipments = snap.docs.map((docSnap) => ({ id: docSnap.id, ...docSnap.data() }));
+  const constraints = [where(fieldName, "==", fieldValue)];
 
   if (statusFilter) {
-    shipments = shipments.filter((shipment) => shipment.currentStatus === statusFilter);
+    constraints.push(where("currentStatus", "==", statusFilter));
   }
 
-  shipments.sort((a, b) => {
-    const aTime = a.createdAt?.toMillis ? a.createdAt.toMillis() : new Date(a.createdAt).getTime();
-    const bTime = b.createdAt?.toMillis ? b.createdAt.toMillis() : new Date(b.createdAt).getTime();
-    return bTime - aTime;
-  });
+  constraints.push(orderBy("createdAt", "desc"));
+  constraints.push(limit(pageSize + 1));
 
-  const hasMore = shipments.length > pageSize;
-  const pageShipments = shipments.slice(0, pageSize);
-  const lastSnap = null;
+  if (lastDoc) {
+    constraints.push(startAfter(lastDoc));
+  }
 
-  return {
-    shipments: pageShipments,
-    lastDoc: lastSnap,
-    hasMore,
-  };
+  const q = query(ref, ...constraints);
+  let snap;
+
+  try {
+    snap = await getDocs(q);
+  } catch (err) {
+    if (err?.message?.includes("requires an index")) {
+      throw new Error(
+        "Firestore index required for this query. " +
+        "Create the composite indexes in the Firebase console or deploy `firestore.indexes.json`. " +
+        "See https://firebase.google.com/docs/firestore/query-data/indexing for details. " +
+        (err.message || "")
+      );
+    }
+    throw err;
+  }
+
+  const hasMore = snap.docs.length > pageSize;
+  const docs = hasMore ? snap.docs.slice(0, pageSize) : snap.docs;
+  const lastSnap = docs.length > 0 ? docs[docs.length - 1] : null;
+
+  const shipments = docs.map((docSnap) => ({ id: docSnap.id, ...docSnap.data() }));
 
   return {
     shipments,
     lastDoc: lastSnap,
     hasMore,
   };
+}
+
+export async function getUserShipmentCount({
+  userId = null,
+  userEmail = null,
+} = {}) {
+  if (!userId && !userEmail) {
+    throw new Error("getUserShipmentCount requires a userId or userEmail");
+  }
+
+  const ref = collection(db, COLLECTION);
+  const fieldName = userId ? "customerId" : "sender.email";
+  const fieldValue = userId ? userId : userEmail;
+  const q = query(ref, where(fieldName, "==", fieldValue));
+  const snapshot = await getCountFromServer(q);
+
+  return snapshot.data().count;
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -282,11 +336,17 @@ export async function updateShipmentStatus({
 // @param  {string} shipmentId
 // @returns {Promise<Object[]>}
 // ─────────────────────────────────────────────────────────────────────────────
-export async function getShipmentEvents(shipmentId) {
+export async function getShipmentEvents(shipmentId, { order = "desc", limit: limitCount = null } = {}) {
   if (!shipmentId) return [];
 
-  const ref  = collection(db, COLLECTION, shipmentId, "events");
-  const q    = query(ref, orderBy("timestamp", "asc"));
+  const ref = collection(db, COLLECTION, shipmentId, "events");
+  const constraints = [orderBy("timestamp", order)];
+
+  if (limitCount && Number.isInteger(limitCount) && limitCount > 0) {
+    constraints.push(limit(limitCount));
+  }
+
+  const q = query(ref, ...constraints);
   const snap = await getDocs(q);
 
   return snap.docs.map((d) => ({

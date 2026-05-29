@@ -2,9 +2,9 @@
 
 import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
-import { usePathname } from "next/navigation";
+import { usePathname, useRouter } from "next/navigation";
 import Logo from "../Logo";
-import { onAuthStateChanged } from "firebase/auth";
+import { onAuthStateChanged, signOut } from "firebase/auth";
 import { doc, getDoc } from "firebase/firestore";
 import { auth, db } from "@/lib/firebase/client";
 import { getUserShipmentCount } from "@/services/shipment.service";
@@ -19,14 +19,15 @@ import {
   Menu,
   X,
   LogOut,
+  Loader2,
 } from "lucide-react";
 
-// ─── Nav Item (shared between sidebar states) ─────────────────────────────────
+// ─── Nav Item ─────────────────────────────────────────────────────────────────
 function NavItem({ link, collapsed, pathname, onClick }) {
   const Icon = link.icon;
   const isActive =
     pathname === link.href ||
-    (link.href !== "/dashboard" && pathname.startsWith(link.href));
+    (link.href !== "/dashboard" && link.href !== "/admin" && pathname.startsWith(link.href));
 
   return (
     <li>
@@ -51,12 +52,10 @@ function NavItem({ link, collapsed, pathname, onClick }) {
           }`}
         />
 
-        {/* Label (hidden when collapsed) */}
         {!collapsed && (
           <span className="flex-1 truncate">{link.label}</span>
         )}
 
-        {/* Badge */}
         {!collapsed && link.badge && (
           <span
             className={`
@@ -71,7 +70,6 @@ function NavItem({ link, collapsed, pathname, onClick }) {
           </span>
         )}
 
-        {/* Collapsed badge dot */}
         {collapsed && link.badge && (
           <span className="absolute top-1.5 right-1.5 w-1.5 h-1.5 rounded-full bg-[#FFB800]" />
         )}
@@ -93,11 +91,13 @@ function SectionLabel({ label, collapsed }) {
 // ─── Sidebar Component ────────────────────────────────────────────────────────
 export default function Sidebar({ isAdmin = false }) {
   const pathname = usePathname();
+  const router = useRouter();
   const [collapsed, setCollapsed] = useState(false);
   const [mobileOpen, setMobileOpen] = useState(false);
   const [user, setUser] = useState(null);
   const [profile, setProfile] = useState(null);
   const [shipmentCount, setShipmentCount] = useState(null);
+  const [signingOut, setSigningOut] = useState(false);
 
   // Close mobile menu on route change
   useEffect(() => {
@@ -108,7 +108,6 @@ export default function Sidebar({ isAdmin = false }) {
     const unsubscribe = onAuthStateChanged(auth, (nextUser) => {
       setUser(nextUser);
     });
-
     return () => unsubscribe();
   }, []);
 
@@ -146,13 +145,15 @@ export default function Sidebar({ isAdmin = false }) {
         });
         setShipmentCount(count);
       } catch (err) {
-        console.error("[Sidebar] loadShipmentCount", err);
         setShipmentCount(null);
       }
     }
 
     loadShipmentCount();
   }, [user]);
+
+  // Derive admin status from profile
+  const userIsAdmin = profile?.isAdmin === true;
 
   const mainLinks = useMemo(
     () => SIDEBAR_MAIN_LINKS.map((link) => {
@@ -168,16 +169,29 @@ export default function Sidebar({ isAdmin = false }) {
   );
 
   const userName = profile?.displayName || user?.displayName || "Guest";
-  const userEmail = profile?.email || user?.email || "No email";
+  const userEmail = profile?.email || user?.email || "";
   const userInitials = userName
     .split(" ")
     .filter(Boolean)
     .map((part) => part[0])
     .join("")
     .slice(0, 2)
-    .toUpperCase();
+    .toUpperCase() || "?";
 
-  // Lock body scroll when mobile drawer is open
+  const handleSignOut = async () => {
+    setSigningOut(true);
+    try {
+      await signOut(auth);
+      // Clear auth cookie
+      document.cookie = "ydk-auth-session=; path=/; max-age=0; SameSite=Lax";
+      router.push("/auth/login");
+    } catch (err) {
+      console.error("[Sidebar] signOut error", err);
+    } finally {
+      setSigningOut(false);
+    }
+  };
+
   useEffect(() => {
     document.body.style.overflow = mobileOpen ? "hidden" : "";
     return () => { document.body.style.overflow = ""; };
@@ -245,8 +259,8 @@ export default function Sidebar({ isAdmin = false }) {
           ))}
         </ul>
 
-        {/* Admin section */}
-        {isAdmin && (
+        {/* Admin section — show if prop passed OR user has isAdmin role */}
+        {(isAdmin || userIsAdmin) && (
           <>
             <SectionLabel label="Admin" collapsed={collapsed && !isMobile} />
             <ul className="space-y-0.5">
@@ -268,18 +282,26 @@ export default function Sidebar({ isAdmin = false }) {
 
         {/* User snippet */}
         {!(collapsed && !isMobile) && (
-          <div className="flex items-center gap-3 px-3 py-2 rounded-xl hover:bg-[#1E293B] transition-colors cursor-pointer group">
+          <div className="flex items-center gap-3 px-3 py-2 rounded-xl hover:bg-[#1E293B] transition-colors">
             <div className="w-8 h-8 rounded-full bg-[#FFB800] flex items-center justify-center text-[#0F172A] font-bold text-xs shrink-0">
-              {userInitials || "JD"}
+              {userInitials}
             </div>
             <div className="flex-1 min-w-0">
               <p className="text-xs font-semibold text-white truncate">{userName}</p>
               <p className="text-[10px] text-[#64748B] truncate">{userEmail}</p>
             </div>
-            <LogOut
-              size={14}
-              className="text-[#475569] group-hover:text-[#94A3B8] shrink-0 transition-colors"
-            />
+            <button
+              onClick={handleSignOut}
+              disabled={signingOut}
+              title="Sign out"
+              className="p-1.5 rounded-lg text-[#475569] hover:text-[#FFB800] hover:bg-[#1E293B] transition-colors"
+            >
+              {signingOut ? (
+                <Loader2 size={14} className="animate-spin" />
+              ) : (
+                <LogOut size={14} />
+              )}
+            </button>
           </div>
         )}
 
@@ -311,7 +333,7 @@ export default function Sidebar({ isAdmin = false }) {
 
   return (
     <>
-      {/* ── Desktop Sidebar (fixed, left) ─────────────────────────────────── */}
+      {/* ── Desktop Sidebar ────────────────────────────────────────────── */}
       <div
         className={`
           hidden lg:flex flex-col fixed top-0 left-0 bottom-0 z-30
@@ -322,7 +344,7 @@ export default function Sidebar({ isAdmin = false }) {
         {sidebarContent(false)}
       </div>
 
-      {/* ── Desktop spacer so main content is not under sidebar ─────────── */}
+      {/* ── Desktop spacer ────────────────────────────────────────────── */}
       <div
         className={`
           hidden lg:block shrink-0 transition-[width] duration-200
@@ -331,7 +353,7 @@ export default function Sidebar({ isAdmin = false }) {
         aria-hidden="true"
       />
 
-      {/* ── Mobile Hamburger Trigger ───────────────────────────────────────── */}
+      {/* ── Mobile Hamburger ───────────────────────────────────────────── */}
       <button
         className="
           lg:hidden fixed top-4 left-4 z-50
@@ -345,7 +367,7 @@ export default function Sidebar({ isAdmin = false }) {
         <Menu size={20} />
       </button>
 
-      {/* ── Mobile Backdrop ────────────────────────────────────────────────── */}
+      {/* ── Mobile Backdrop ─────────────────────────────────────────────── */}
       <div
         className={`
           lg:hidden fixed inset-0 z-40 bg-black/60 backdrop-blur-sm
@@ -356,7 +378,7 @@ export default function Sidebar({ isAdmin = false }) {
         aria-hidden="true"
       />
 
-      {/* ── Mobile Drawer ──────────────────────────────────────────────────── */}
+      {/* ── Mobile Drawer ──────────────────────────────────────────────── */}
       <div
         className={`
           lg:hidden fixed top-0 left-0 bottom-0 z-50

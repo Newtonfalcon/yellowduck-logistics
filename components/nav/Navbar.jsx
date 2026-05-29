@@ -2,30 +2,35 @@
 
 import { useState, useEffect } from "react";
 import Link from "next/link";
+import { usePathname } from "next/navigation";
 import Logo from "../Logo";
-import {
-  PUBLIC_NAV_LINKS,
-  PUBLIC_NAV_CTA,
-  PUBLIC_NAV_AUTH,
-} from "@/constants";
 import { Menu, X, Package } from "lucide-react";
+
+const NAV_LINKS = [
+  { label: "About", href: "/about" },
+  { label: "Pricing", href: "/pricing" },
+  { label: "Contact", href: "/contact" },
+  { label: "Track Package", href: "/track" },
+];
 
 export default function Navbar() {
   const [mobileOpen, setMobileOpen] = useState(false);
   const [scrolled, setScrolled] = useState(false);
+  const pathname = usePathname();
 
-  // Add backdrop blur on scroll
   useEffect(() => {
     const handler = () => setScrolled(window.scrollY > 16);
     window.addEventListener("scroll", handler, { passive: true });
     return () => window.removeEventListener("scroll", handler);
   }, []);
 
-  // Lock body scroll when mobile menu is open
   useEffect(() => {
     document.body.style.overflow = mobileOpen ? "hidden" : "";
     return () => { document.body.style.overflow = ""; };
   }, [mobileOpen]);
+
+  // Close on navigation
+  useEffect(() => setMobileOpen(false), [pathname]);
 
   return (
     <>
@@ -49,27 +54,31 @@ export default function Navbar() {
 
             {/* Desktop Nav Links */}
             <ul className="hidden lg:flex items-center gap-1">
-              {PUBLIC_NAV_LINKS.map((link) => (
-                <li key={link.href}>
-                  <Link
-                    href={link.href}
-                    className="
-                      px-4 py-2 rounded-lg text-sm font-medium text-[#334155]
-                      hover:text-[#0F172A] hover:bg-slate-100
-                      transition-colors duration-150
-                    "
-                  >
-                    {link.label}
-                  </Link>
-                </li>
-              ))}
+              {NAV_LINKS.map((link) => {
+                const isActive = pathname === link.href || pathname.startsWith(link.href + "/");
+                return (
+                  <li key={link.href}>
+                    <Link
+                      href={link.href}
+                      className={`
+                        px-4 py-2 rounded-lg text-sm font-medium transition-colors duration-150
+                        ${isActive
+                          ? "text-[#0F172A] bg-[#FFB800]/10 font-semibold"
+                          : "text-[#334155] hover:text-[#0F172A] hover:bg-slate-100"
+                        }
+                      `}
+                    >
+                      {link.label}
+                    </Link>
+                  </li>
+                );
+              })}
             </ul>
 
             {/* Desktop Right Actions */}
             <div className="hidden lg:flex items-center gap-3">
-              {/* Track CTA */}
               <Link
-                href={PUBLIC_NAV_CTA.href}
+                href="/track"
                 className="
                   flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-semibold
                   bg-[#FFB800] text-[#0F172A]
@@ -78,20 +87,20 @@ export default function Navbar() {
                 "
               >
                 <Package size={15} />
-                {PUBLIC_NAV_CTA.label}
+                Track Package
               </Link>
 
               <div className="w-px h-5 bg-slate-200" />
 
               <Link
-                href={PUBLIC_NAV_AUTH.login.href}
+                href="/auth/login"
                 className="px-4 py-2 text-sm font-medium text-[#475569] hover:text-[#0F172A] transition-colors"
               >
-                {PUBLIC_NAV_AUTH.login.label}
+                Log in
               </Link>
 
               <Link
-                href={PUBLIC_NAV_AUTH.signup.href}
+                href="/auth/register"
                 className="
                   px-4 py-2 rounded-lg text-sm font-semibold
                   bg-[#0F172A] text-white
@@ -99,7 +108,7 @@ export default function Navbar() {
                   transition-all duration-150
                 "
               >
-                {PUBLIC_NAV_AUTH.signup.label}
+                Get Started
               </Link>
             </div>
 
@@ -116,8 +125,7 @@ export default function Navbar() {
         </nav>
       </header>
 
-      {/* ── Mobile Slide-Out Menu ──────────────────────────────────────── */}
-      {/* Backdrop */}
+      {/* ── Mobile Backdrop ──────────────────────────────────────────────── */}
       <div
         className={`
           fixed inset-0 z-40 bg-[#0F172A]/50 backdrop-blur-sm lg:hidden
@@ -128,7 +136,7 @@ export default function Navbar() {
         aria-hidden="true"
       />
 
-      {/* Drawer panel */}
+      {/* ── Mobile Drawer ─────────────────────────────────────────────────── */}
       <div
         className={`
           fixed top-0 right-0 bottom-0 z-50 w-80 max-w-[90vw]
@@ -140,7 +148,6 @@ export default function Navbar() {
         role="dialog"
         aria-label="Mobile navigation"
       >
-        {/* Drawer Header */}
         <div className="flex items-center justify-between px-5 h-16 border-b border-[#E2E8F0]">
           <Logo size="md" theme="dark" />
           <button
@@ -152,10 +159,9 @@ export default function Navbar() {
           </button>
         </div>
 
-        {/* Track CTA — prominent */}
         <div className="px-5 pt-5">
           <Link
-            href={PUBLIC_NAV_CTA.href}
+            href="/track"
             onClick={() => setMobileOpen(false)}
             className="
               flex items-center justify-center gap-2 w-full py-3 rounded-xl
@@ -164,37 +170,40 @@ export default function Navbar() {
             "
           >
             <Package size={16} />
-            {PUBLIC_NAV_CTA.label}
+            Track Package
           </Link>
         </div>
 
-        {/* Nav links */}
         <nav className="flex-1 overflow-y-auto px-5 pt-4">
           <ul className="space-y-1">
-            {PUBLIC_NAV_LINKS.map((link) => (
-              <li key={link.href}>
-                <Link
-                  href={link.href}
-                  onClick={() => setMobileOpen(false)}
-                  className="
-                    flex items-center gap-3 px-3 py-3 rounded-lg
-                    text-[#334155] font-medium text-sm
-                    hover:bg-slate-50 hover:text-[#0F172A]
-                    transition-colors
-                  "
-                >
-                  {link.label}
-                </Link>
-              </li>
-            ))}
+            {NAV_LINKS.map((link) => {
+              const isActive = pathname === link.href;
+              return (
+                <li key={link.href}>
+                  <Link
+                    href={link.href}
+                    onClick={() => setMobileOpen(false)}
+                    className={`
+                      flex items-center gap-3 px-3 py-3 rounded-lg
+                      font-medium text-sm transition-colors
+                      ${isActive
+                        ? "bg-[#FFB800]/10 text-[#0F172A] font-semibold"
+                        : "text-[#334155] hover:bg-slate-50 hover:text-[#0F172A]"
+                      }
+                    `}
+                  >
+                    {link.label}
+                  </Link>
+                </li>
+              );
+            })}
           </ul>
 
           <div className="my-4 border-t border-[#E2E8F0]" />
 
-          {/* Auth links */}
           <div className="space-y-2">
             <Link
-              href={PUBLIC_NAV_AUTH.login.href}
+              href="/auth/login"
               onClick={() => setMobileOpen(false)}
               className="
                 flex items-center justify-center w-full py-3 rounded-xl
@@ -202,10 +211,10 @@ export default function Navbar() {
                 hover:bg-slate-50 transition-colors
               "
             >
-              {PUBLIC_NAV_AUTH.login.label}
+              Log in
             </Link>
             <Link
-              href={PUBLIC_NAV_AUTH.signup.href}
+              href="/auth/register"
               onClick={() => setMobileOpen(false)}
               className="
                 flex items-center justify-center w-full py-3 rounded-xl
@@ -213,12 +222,11 @@ export default function Navbar() {
                 hover:bg-[#1E293B] transition-colors
               "
             >
-              {PUBLIC_NAV_AUTH.signup.label}
+              Get Started
             </Link>
           </div>
         </nav>
 
-        {/* Footer note */}
         <div className="px-5 py-4 border-t border-[#E2E8F0]">
           <p className="text-xs text-[#94A3B8] text-center">
             hello@yellowduck.io · +1 (415) 555-0192

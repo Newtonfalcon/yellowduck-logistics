@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { useRouter } from "next/navigation";
 import Link from "next/link";
 
 import Logo from "@/components/Logo";
@@ -34,13 +35,13 @@ import {
 // ─── Tracking Input ───────────────────────────────────────────────────────────
 function TrackingInput() {
   const [value, setValue] = useState("");
-  const [loading, setLoading] = useState(false);
+  const router = useRouter();
 
   const handleTrack = (e) => {
     e.preventDefault();
-    if (!value.trim()) return;
-    setLoading(true);
-    setTimeout(() => setLoading(false), 1200);
+    const id = value.trim();
+    if (!id) return;
+    router.push(`/track/${encodeURIComponent(id)}`);
   };
 
   return (
@@ -70,25 +71,17 @@ function TrackingInput() {
       </div>
       <button
         type="submit"
-        disabled={loading}
         className="
           flex items-center justify-center gap-2
           px-6 py-4 rounded-xl
           bg-[#FFB800] text-[#0F172A]
           font-semibold text-sm
           hover:bg-[#F0AE00] active:scale-[0.98]
-          disabled:opacity-60 disabled:cursor-not-allowed
           transition-all duration-150 shadow-sm whitespace-nowrap
         "
       >
-        {loading ? (
-          <span className="w-4 h-4 border-2 border-[#0F172A]/30 border-t-[#0F172A] rounded-full animate-spin" />
-        ) : (
-          <>
-            {HERO.tracking_cta}
-            <ArrowRight size={15} />
-          </>
-        )}
+        {HERO.tracking_cta}
+        <ArrowRight size={15} />
       </button>
     </form>
   );
@@ -107,7 +100,6 @@ function FeatureCard({ feature, index }) {
       "
       style={{ animationDelay: `${index * 100}ms` }}
     >
-      {/* Icon badge */}
       <div className="w-11 h-11 rounded-xl bg-[#FFF8E6] flex items-center justify-center">
         <Icon size={20} className="text-[#FFB800]" strokeWidth={2} />
       </div>
@@ -121,7 +113,6 @@ function FeatureCard({ feature, index }) {
         </p>
       </div>
 
-      {/* Tags */}
       <div className="flex flex-wrap gap-2 mt-auto">
         {feature.tags.map((tag) => (
           <span
@@ -178,15 +169,11 @@ export default function LandingPage() {
 
   return (
     <div className="min-h-screen bg-[#F8FAFC] font-sans antialiased">
-      {/* Navigation */}
-      
-
       <main>
         {/* ═══════════════════════════════════════════════════════
             HERO SECTION
         ══════════════════════════════════════════════════════ */}
         <section className="relative pt-24 pb-20 lg:pt-36 lg:pb-28 overflow-hidden">
-          {/* Subtle background pattern */}
           <div
             className="absolute inset-0 pointer-events-none"
             aria-hidden="true"
@@ -198,7 +185,6 @@ export default function LandingPage() {
             }}
           />
 
-          {/* Grid line decoration */}
           <div
             className="absolute inset-0 pointer-events-none opacity-[0.025]"
             aria-hidden="true"
@@ -214,7 +200,6 @@ export default function LandingPage() {
           <div className="relative max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
             <div className="flex flex-col items-center text-center gap-8">
 
-              {/* Eyebrow pill */}
               <div className="inline-flex items-center gap-2 px-3.5 py-1.5 rounded-full bg-[#FFB800]/12 border border-[#FFB800]/25">
                 <Zap size={13} className="text-[#FFB800]" />
                 <span className="text-xs font-semibold text-[#92670A] tracking-wide">
@@ -222,7 +207,6 @@ export default function LandingPage() {
                 </span>
               </div>
 
-              {/* Headline */}
               <h1 className="text-4xl sm:text-5xl lg:text-[62px] font-extrabold text-[#0F172A] leading-[1.1] tracking-tight max-w-4xl">
                 {HERO.headline.split("\n").map((line, i) => (
                   <span key={i}>
@@ -231,7 +215,6 @@ export default function LandingPage() {
                         <br />
                         <span className="relative">
                           <span className="relative z-10">{line}</span>
-                          {/* amber underline accent on last line */}
                           <span
                             className="absolute bottom-0.5 left-0 right-0 h-[6px] bg-[#FFB800]/30 -z-0 rounded"
                             aria-hidden="true"
@@ -245,12 +228,10 @@ export default function LandingPage() {
                 ))}
               </h1>
 
-              {/* Subheadline */}
               <p className="text-base sm:text-lg text-[#475569] leading-relaxed max-w-2xl">
                 {HERO.subheadline}
               </p>
 
-              {/* Tracking Input */}
               <div className="w-full max-w-xl">
                 <TrackingInput />
                 <p className="mt-3 text-xs text-[#94A3B8]">
@@ -258,7 +239,6 @@ export default function LandingPage() {
                 </p>
               </div>
 
-              {/* Stats row */}
               <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 sm:gap-8 pt-4 w-full max-w-2xl">
                 {HERO.stats.map((stat) => (
                   <div
@@ -304,7 +284,6 @@ export default function LandingPage() {
         ══════════════════════════════════════════════════════ */}
         <section className="py-20 lg:py-28">
           <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-            {/* Section header */}
             <div className="flex flex-col items-center text-center gap-4 mb-14">
               <div className="inline-flex items-center gap-2 px-3 py-1.5 rounded-full bg-[#0F172A]/6 border border-[#0F172A]/10">
                 <Sparkles size={12} className="text-[#475569]" />
@@ -320,7 +299,6 @@ export default function LandingPage() {
               </p>
             </div>
 
-            {/* Feature grid */}
             <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
               {FEATURES.map((feature, index) => (
                 <FeatureCard key={feature.id} feature={feature} index={index} />
@@ -388,17 +366,14 @@ export default function LandingPage() {
       <footer className="bg-[#0B1120] border-t border-[#1E293B]">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
 
-          {/* Main footer grid */}
           <div className="py-14 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-10">
 
-            {/* Brand column */}
             <div className="lg:col-span-2 flex flex-col gap-5">
               <Logo size="md" theme="light" />
               <p className="text-sm text-[#64748B] leading-relaxed max-w-xs">
                 {FOOTER_META.tagline}
               </p>
 
-              {/* Contact */}
               <ul className="space-y-2">
                 {FOOTER_CONTACT.map((item) => {
                   const Icon = item.icon;
@@ -416,7 +391,6 @@ export default function LandingPage() {
                 })}
               </ul>
 
-              {/* Socials */}
               <div className="flex items-center gap-2">
                 {FOOTER_SOCIALS.map((social) => {
                   const Icon = social.icon;
@@ -441,13 +415,11 @@ export default function LandingPage() {
               </div>
             </div>
 
-            {/* Link columns */}
             {FOOTER_COLUMNS.map((column) => (
               <FooterColumn key={column.heading} column={column} />
             ))}
           </div>
 
-          {/* Bottom bar */}
           <div className="py-5 border-t border-[#1E293B] flex flex-col sm:flex-row items-center justify-between gap-4">
             <p className="text-xs text-[#475569]">{FOOTER_META.copyright}</p>
             <nav className="flex flex-wrap items-center gap-5" aria-label="Legal">
